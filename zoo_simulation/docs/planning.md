@@ -1,5 +1,10 @@
 # Software Design and Project Planning
 
+The original assignment brief is kept verbatim in
+[`aufgabe.md`](aufgabe.md) as the authoritative source of truth; this
+document and the individual planning documents are the team's
+interpretation of it and must stay aligned with it.
+
 ## 1. Project Overview
 
 The Zoo Management System (ZMS) is a Python-based software project developed
