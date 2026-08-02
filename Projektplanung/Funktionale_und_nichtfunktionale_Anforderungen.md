@@ -63,17 +63,18 @@ This section defines the system requirements, including priorities and acceptanc
 **NFR-01: Performance**
 - User interactions should have a response time below **500 ms** under normal operating conditions.
 
-**NFR-02: Security**
-- Employee functions shall only be accessible through role-based authorization.
-
-**NFR-03: Maintainability**
+**NFR-02: Maintainability**
 - The software shall follow object-oriented design principles and a layered architecture to simplify future extensions.
 
-**NFR-04: Reliability**
+**NFR-03: Reliability**
 - Application data shall be stored persistently using SQLite via the Repository Pattern.
 
-**NFR-05: Extensibility**
+**NFR-04: Extensibility**
 - The system shall support the addition of new animal species, employee types, and simulation behaviors without requiring modifications to existing core classes.
+
+Note: user authentication and role-based authorization are explicitly out of
+scope for this project (see `planning.md` section 4.2); there is no NFR for
+security/authentication.
 
 ---
 
@@ -83,7 +84,6 @@ This section defines the system requirements, including priorities and acceptanc
 - FR-01
 - FR-02
 - FR-06
-- NFR-02
 
 **Medium**
 - FR-03
@@ -92,9 +92,9 @@ This section defines the system requirements, including priorities and acceptanc
 - NFR-01
 
 **Low**
+- NFR-02
 - NFR-03
 - NFR-04
-- NFR-05
 
 ---
 

@@ -49,8 +49,12 @@ The Zoo Management System includes the following core features:
 | pandas | Data processing |
 | openpyxl | Excel export |
 | csv | CSV export |
-| pytest | Testing (test cases described, see docs) |
 | Git | Version control |
+
+Note: automated tests (e.g. with `pytest`) are intentionally **not**
+implemented for this project — per the assignment, test cases are described
+in the `docs/planning_*.md` files instead. `pytest` is therefore not listed
+as a dependency.
 
 ---
 
@@ -68,7 +72,6 @@ zoo_simulation/
 ├── repositories/
 ├── services/
 ├── simulation/
-├── tests/
 │
 ├── main.py
 ├── requirements.txt

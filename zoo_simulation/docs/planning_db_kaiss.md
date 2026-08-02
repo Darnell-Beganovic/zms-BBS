@@ -17,9 +17,9 @@ The Database focus area covers:
 - CSV and Excel export of report data (`ReportService` depends on the
   repository `get_as_dataframe()` methods).
 
-Only SQLite is planned as a persistence backend (see NFR-04/NFR-05 in
-`Funktionale_und_nichtfunktionale_Anforderungen.md`); no MySQL variant is
-implemented or planned.
+Only SQLite is planned as a persistence backend (see NFR-03 in
+`../../Projektplanung/Funktionale_und_nichtfunktionale_Anforderungen.md` and
+NFR-05 in `planning.md`); no MySQL variant is implemented or planned.
 
 ## 2. Class Diagram (Database Focus)
 

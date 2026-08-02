@@ -37,32 +37,31 @@ graph LR
 ```
 
 Responsibilities:
-- `Web Client`: UI, user interactions, wireframes.
-- `API`: authentication, request routing, validation.
-- `Application Services`: business logic mapped from UML classes.
-- `Simulation Engine`: runs time steps, schedules events, updates domain objects.
-- `Repositories` + `Database`: persistent storage and queries.
-- `File Export`: report generation (CSV/Excel).
+- `ZooView`: Flask routes and templates — user interaction, forms, rendering.
+- `ZooController`: request routing and validation between the view and the service layer (no authentication — out of scope, see `planning.md` section 4.2).
+- `ZooService` / `SimulationService` / `ReportService`: business logic mapped from the UML classes in `Klassendiagramm_Code.md`.
+- `SimulationEngine`: runs time steps, schedules events, updates domain objects.
+- `Repository Layer` + `SQLite Database`: persistent storage and queries.
+- `CSV / Excel Export`: report generation via `ReportService`.
 
 ### Deployment Diagram (simple)
 
+The application is a single local process — no cloud, load balancer or
+separate worker services are planned (see `planning.md` section 4.2,
+"Out of Scope").
+
 ```mermaid
 flowchart TD
-  User["User (Browser)"] --> LB["Load Balancer / Reverse Proxy"]
-  LB --> WebApp["Web Application (Frontend)"]
-  LB --> APIServer["API Server / Backend Service"]
-  APIServer --> DB["Database (SQLite)"]
-  APIServer --> SimulationWorker["Simulation Worker / Background Job"]
-  SimulationWorker --> DB
-  APIServer --> FileStore["File Storage (local or S3)"]
-  Monitoring["Monitoring / Logging"] --- APIServer
-  Monitoring --- SimulationWorker
+  User["User (Browser)"] --> FlaskApp["Flask Application (single process, python main.py)"]
+  FlaskApp --> DB[("SQLite Database File")]
+  FlaskApp --> FileStore["Local File System (CSV / Excel exports)"]
 ```
 
 Notes:
-- The SimulationWorker can be run as a separate scalable service or as a scheduled job.
-- The project uses `SQLite` as its single persistence choice (no MySQL/production alternative planned; see `Funktionale_und_nichtfunktionale_Anforderungen.md` NFR-04).
-- Monitoring/Logging should capture simulation metrics, errors and performance.
+- The Flask app, the simulation logic and the SQLite access all run in one
+  process on the local machine; the simulation step is triggered by a user
+  request (e.g. `POST /simulation/step`), not by a background worker.
+- The project uses `SQLite` as its single persistence choice (no MySQL/production alternative planned; see `Funktionale_und_nichtfunktionale_Anforderungen.md` NFR-03).
 
 ### Mapping to UML
 - Components map to groups of classes in `Klassendiagramm_Code.md` (e.g. `ZooService` → Application Services; `SimulationEngine` → Simulation component).

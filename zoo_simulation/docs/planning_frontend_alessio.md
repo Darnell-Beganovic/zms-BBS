@@ -123,7 +123,6 @@ below; they are **not** implemented as automated pytest code.
 
 ## 6. Open Questions / Assumptions
 
-- Session/authentication is out of scope (see `planning.md` section 4.2), so
-  all routes are currently unauthenticated; role-based access (NFR-02 in
-  `Funktionale_und_nichtfunktionale_Anforderungen.md`) is a stretch goal if
-  time permits.
+- User authentication and role-based access are explicitly out of scope for
+  this project (see `planning.md` section 4.2); all routes are
+  unauthenticated by design, not as a temporary simplification.

@@ -10,11 +10,11 @@ classDiagram
     %% =========================
 
     class ZooView {
+        <<Flask blueprint>>
         +show_zoo_status(data: DataFrame) void
         +show_animals(data: DataFrame) void
         +show_financial_report(data: DataFrame) void
         +show_message(message: str) void
-        +get_user_command() str
     }
 
     class ZooController {

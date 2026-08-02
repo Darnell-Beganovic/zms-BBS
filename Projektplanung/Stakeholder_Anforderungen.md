@@ -9,7 +9,6 @@ graph LR
   Veterinarian[Veterinarian] -->|treats animals| System
   Administrator[Administrator] -->|manages finances| System
   Supplier[Supplier] -->|delivers food/medication| System
-  External[External Systems] -->|API| System
 ```
 
 - Functional examples:
@@ -20,9 +19,13 @@ graph LR
   - System can export reports (CSV/Excel)
 
 - Non-functional examples:
-  - Performance: response time < 200 ms for key endpoints
-  - Security: authentication for staff functions
-  - Scalability: modular services for the simulation
+  - Performance: response time < 500 ms for key user interactions (see NFR-01)
+  - Reliability: invalid operations must not corrupt persisted data
+  - Extensibility: new animal species or employee types can be added without touching existing classes
+
+Note: user authentication is out of scope for this project (see `planning.md`
+section 4.2); there is no external system integration (`Supplier` is a
+real-world stakeholder, not a software integration).
 
 - Acceptance criteria:
   - Stakeholder list is complete

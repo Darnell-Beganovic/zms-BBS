@@ -76,5 +76,5 @@ SCHEDULED_EVENT {
 
 Notes:
 - `PK` marks the primary key, `FK` marks a foreign key referencing the parent entity from the relationship above (e.g. `ENCLOSURE.zoo_id` references `ZOO.zoo_id`).
-- The persistence layer is SQLite only (see `Funktionale_und_nichtfunktionale_Anforderungen.md` NFR-04); no MySQL variant is planned.
+- The persistence layer is SQLite only (see `Funktionale_und_nichtfunktionale_Anforderungen.md` NFR-03); no MySQL variant is planned.
 - `FEEDING_RECORD` and `TREATMENT_RECORD` (not yet modeled above) could capture historical events for auditing and simulation replay if the team decides to add feeding/treatment history later.
