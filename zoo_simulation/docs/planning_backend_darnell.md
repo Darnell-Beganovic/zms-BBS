@@ -13,7 +13,9 @@ The Backend focus area covers:
 
 - The domain layer: `Zoo`, `Employee` hierarchy, `Animal` hierarchy,
   `Enclosure`, `Inventory`, `FinanceManager`, `Transaction`.
-- The service layer: `ZooService`, `SimulationService`, `ReportService`.
+- The service layer: `ZooService`, `SimulationService`. `ReportService`
+  is owned by the Database focus (Kaiss), since it builds directly on the
+  repositories' `get_as_dataframe()` methods and CSV/Excel export.
 - The controller layer: `ZooController`, which mediates between the Flask
   frontend (Alessio) and the service layer.
 - The simulation core: `SimulationEngine`, `EventScheduler`,
