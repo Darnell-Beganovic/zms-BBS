@@ -35,5 +35,3 @@ sequenceDiagram
     Service-->>Controller: feeding successful
     Controller-->>View: display confirmation
 ```
-
-Hinweis: Möchtest du, dass ich diese Datei in `Projektplanung/UserStories_UseCases.md` verlinke oder gleich weitere Sequenzdiagramme erstelle?

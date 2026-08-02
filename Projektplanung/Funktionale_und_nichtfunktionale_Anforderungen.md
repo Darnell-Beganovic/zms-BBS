@@ -70,7 +70,7 @@ This section defines the system requirements, including priorities and acceptanc
 - The software shall follow object-oriented design principles and a layered architecture to simplify future extensions.
 
 **NFR-04: Reliability**
-- Application data shall be stored persistently using SQLite or MySQL repositories.
+- Application data shall be stored persistently using SQLite via the Repository Pattern.
 
 **NFR-05: Extensibility**
 - The system shall support the addition of new animal species, employee types, and simulation behaviors without requiring modifications to existing core classes.
@@ -114,7 +114,5 @@ This section defines the system requirements, including priorities and acceptanc
 ### Acceptance Criteria and Validation
 
 - Every functional requirement includes at least one Given/When/Then scenario.
-- Functional requirements shall be validated through integration and system testing.
-- Non-functional requirements shall be verified through code reviews, performance measurements, and architectural evaluation.
-
-If you prefer this version, I will translate the other planning files into English as well. Say `next` to proceed.
+- As required by the module assignment, test cases for each requirement are described (see the Test Plan in `planning.md`) but are not implemented as automated tests.
+- Non-functional requirements shall be verified through code reviews and architectural evaluation.

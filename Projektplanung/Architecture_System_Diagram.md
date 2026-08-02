@@ -51,7 +51,7 @@ flowchart TD
   User["User (Browser)"] --> LB["Load Balancer / Reverse Proxy"]
   LB --> WebApp["Web Application (Frontend)"]
   LB --> APIServer["API Server / Backend Service"]
-  APIServer --> DB["Database (MySQL / SQLite)"]
+  APIServer --> DB["Database (SQLite)"]
   APIServer --> SimulationWorker["Simulation Worker / Background Job"]
   SimulationWorker --> DB
   APIServer --> FileStore["File Storage (local or S3)"]
@@ -60,11 +60,9 @@ flowchart TD
 ```
 
 Notes:
-- The SimulationWorker can be run as a separate scalable service or as a scheduled job. 
-- For local/simple deployments use `SQLite`; for production choose MySQL and proper backups.
+- The SimulationWorker can be run as a separate scalable service or as a scheduled job.
+- The project uses `SQLite` as its single persistence choice (no MySQL/production alternative planned; see `Funktionale_und_nichtfunktionale_Anforderungen.md` NFR-04).
 - Monitoring/Logging should capture simulation metrics, errors and performance.
 
 ### Mapping to UML
 - Components map to groups of classes in `Klassendiagramm_Code.md` (e.g. `ZooService` → Application Services; `SimulationEngine` → Simulation component).
-
-Next: review this architecture sketch; say `next` to generate the ER‑diagram / data model.

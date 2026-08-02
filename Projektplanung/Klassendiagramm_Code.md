@@ -333,18 +333,6 @@ classDiagram
         +close() void
     }
 
-    class MySQLConnection {
-        -str host
-        -str database_name
-        -str username
-        -str password
-        +connect() void
-        +execute(query: str, parameters: tuple) object
-        +commit() void
-        +rollback() void
-        +close() void
-    }
-
     class SQLZooRepository {
         -DatabaseConnection connection
         +save(zoo: Zoo) void
@@ -404,7 +392,6 @@ classDiagram
     Behavior <|-- RestBehavior
 
     DatabaseConnection <|.. SQLiteConnection
-    DatabaseConnection <|.. MySQLConnection
 
     ZooRepository <|.. SQLZooRepository
     AnimalRepository <|.. SQLAnimalRepository

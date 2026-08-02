@@ -35,5 +35,3 @@ sequenceDiagram
     Service-->>Controller: treatment successful
     Controller-->>View: display confirmation
 ```
-
-Note: Soll ich diese Datei in `Projektplanung/UserStories_UseCases.md` verlinken oder weitere Sequenzdiagramme erstellen?

@@ -6,11 +6,17 @@ The application combines administrative functionality, animal management and a t
 
 ---
 
-# Team Members
+# Team Members & Responsibilities
 
-- Kaiss Saleh
-- Alessio Ballamacina
-- Darniell Beganovic
+| Member | Focus Area | Individual Planning |
+|--------|-----------|----------------------|
+| Kaiss Saleh | Database (SQLite, Repository Pattern, reports) | [`planning_db_kaiss.md`](zoo_simulation/docs/planning_db_kaiss.md) |
+| Alessio Bellamacina | Frontend (Flask web UI) | [`planning_frontend_alessio.md`](zoo_simulation/docs/planning_frontend_alessio.md) |
+| Darnell Beganovic | Backend (domain model, services, simulation) | [`planning_backend_darnell.md`](zoo_simulation/docs/planning_backend_darnell.md) |
+
+Architecture, integration, code review and documentation remain shared
+responsibilities across the whole team; see
+[`zoo_simulation/docs/planning.md`](zoo_simulation/docs/planning.md) for details.
 
 ---
 
@@ -37,12 +43,13 @@ The Zoo Management System includes the following core features:
 | Technology | Purpose |
 |------------|---------|
 | Python 3.14 | Programming language |
+| Flask | Web frontend / routing |
 | SQLite | Database |
 | sqlite3 | Database access |
 | pandas | Data processing |
 | openpyxl | Excel export |
 | csv | CSV export |
-| pytest | Testing |
+| pytest | Testing (test cases described, see docs) |
 | Git | Version control |
 
 ---

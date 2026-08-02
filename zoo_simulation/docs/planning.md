@@ -20,10 +20,20 @@ separated into independent components with clearly defined responsibilities.
 SQLite is planned for persistent data storage. Financial and operational data
 can later be exported as CSV and Excel reports.
 
-The project is developed collaboratively by Kaiss Saleh, Alessio Ballamacina
-and Darniell Beganovic. The main responsibilities are divided between the team
+The project is developed collaboratively by Kaiss Saleh, Alessio Bellamacina
+and Darnell Beganovic. The main responsibilities are divided between the team
 members, while architecture, integration, review and documentation remain
-shared tasks.
+shared tasks. Each member additionally keeps an individual planning document
+for their own focus area, as required by the module assignment:
+
+- [`planning_backend_darnell.md`](planning_backend_darnell.md) — Darnell Beganovic (Backend)
+- [`planning_frontend_alessio.md`](planning_frontend_alessio.md) — Alessio Bellamacina (Frontend)
+- [`planning_db_kaiss.md`](planning_db_kaiss.md) — Kaiss Saleh (Database)
+
+This document (`planning.md`) covers the parts that are shared across the
+whole team: overall scope, architecture, domain model and simulation design.
+The detailed Mermaid diagrams referenced throughout this document live in the
+[`Projektplanung/`](../../Projektplanung) folder at the repository root.
 
 ## 2. Team Members and Responsibilities
 
@@ -31,18 +41,19 @@ The Zoo Management System is developed collaboratively by three team members.
 To ensure a balanced workload and a clear distribution of responsibilities,
 each member is primarily responsible for a specific part of the project.
 
-### Alessio Ballamacina
+### Alessio Bellamacina — Frontend
 
 Primary responsibilities:
 
-- Design of the object-oriented domain model
-- Implementation of animal-related classes
-- Design and implementation of the simulation logic
-- Development of the `SimulationEngine`
-- Definition of animal behaviour and simulation rules
+- Design and implementation of the Flask-based web user interface
+- Routes, templates and view logic (presentation layer)
+- Presenting zoo status, animal data and financial reports to the user
+- Input forms and client-facing input validation
 - Review of object-oriented design principles
 
-### Kaiss Saleh
+See [`planning_frontend_alessio.md`](planning_frontend_alessio.md) for the detailed individual planning.
+
+### Kaiss Saleh — Database
 
 Primary responsibilities:
 
@@ -53,16 +64,19 @@ Primary responsibilities:
 - Inventory and finance repositories
 - CSV and Excel report generation
 
-### Darniell Beganovic
+See [`planning_db_kaiss.md`](planning_db_kaiss.md) for the detailed individual planning.
+
+### Darnell Beganovic — Backend
 
 Primary responsibilities:
 
-- Service layer
-- Controller layer
-- User interface
-- Input validation
-- Application workflow
+- Domain model (`Zoo`, `Employee`, `Animal` hierarchies, `Enclosure`, `Inventory`, `FinanceManager`)
+- Service layer and controller layer
+- Simulation logic and the `SimulationEngine`
+- Application workflow and server-side input validation
 - Test case documentation
+
+See [`planning_backend_darnell.md`](planning_backend_darnell.md) for the detailed individual planning.
 
 ### Shared Responsibilities
 
@@ -142,7 +156,7 @@ The following features are included in the project:
 - Event scheduling
 - SQLite database persistence
 - CSV and Excel report generation
-- Console-based user interface
+- Flask-based web user interface
 - Layered software architecture
 - Repository Pattern
 - Object-oriented software design
@@ -151,8 +165,7 @@ The following features are included in the project:
 
 The following features are intentionally excluded from the project:
 
-- Web application
-- Graphical desktop application
+- Graphical desktop application (native GUI toolkit)
 - User authentication and authorization
 - Multi-user support
 - REST API
@@ -186,7 +199,7 @@ Zoo Management System.
 | FR-12 | The system shall validate all user input before processing operations. |
 | FR-13 | The system shall display informative success and error messages to the user. |
 | FR-14 | The system shall save changes to persistent storage after successful operations. |
-| FR-15 | The system shall provide a console-based user interface for interacting with the application. |
+| FR-15 | The system shall provide a Flask-based web user interface for interacting with the application. |
 
 ## 6. Non-Functional Requirements
 
@@ -226,21 +239,20 @@ and database access into independent modules.
 
 The application consists of the following layers:
 
-| Layer | Responsibility | Main Components |
-|--------|----------------|-----------------|
-| Presentation Layer | Displays information and receives user input | ZooView |
-| Controller Layer | Coordinates user requests and application flow | ZooController |
-| Service Layer | Contains business logic | ZooService, SimulationService, ReportService |
-| Domain Layer | Represents the object-oriented zoo model | Animal, Employee, Zoo, Inventory, Enclosure |
-| Simulation Layer | Controls simulation behaviour and scheduled events | SimulationEngine, EventScheduler, EnvironmentalFactor |
-| Repository Layer | Provides an abstraction for database access | Repository Interfaces |
-| Persistence Layer | Stores application data | SQLite, DatabaseConnection |
+| Layer | Responsibility | Main Components | Owner |
+|--------|----------------|-----------------|-------|
+| Presentation Layer | Displays information and receives user input via Flask views/templates | ZooView (Flask routes & templates) | Alessio (Frontend) |
+| Controller Layer | Coordinates user requests and application flow | ZooController | Darnell (Backend) |
+| Service Layer | Contains business logic | ZooService, SimulationService, ReportService | Darnell (Backend) |
+| Domain Layer | Represents the object-oriented zoo model | Animal, Employee, Zoo, Inventory, Enclosure | Darnell (Backend) |
+| Simulation Layer | Controls simulation behaviour and scheduled events | SimulationEngine, EventScheduler, EnvironmentalFactor | Darnell (Backend) |
+| Repository Layer | Provides an abstraction for database access | Repository Interfaces | Kaiss (Database) |
+| Persistence Layer | Stores application data | SQLite, DatabaseConnection | Kaiss (Database) |
 
 ### 7.2 Architecture Diagram
 
-The overall system architecture is illustrated in the following diagram.
-
-*(Insert Mermaid architecture diagram here.)*
+The overall system architecture is illustrated in the component and deployment
+diagrams in [`Projektplanung/Architecture_System_Diagram.md`](../../Projektplanung/Architecture_System_Diagram.md).
 
 ## 8. Object-Oriented Design
 
@@ -392,7 +404,11 @@ including inheritance, composition, aggregation and associations.
 
 ### UML Class Diagram
 
-*Insert the final UML or Mermaid class diagram here.*
+The complete class diagram is maintained in
+[`Projektplanung/Klassendiagramm_Code.md`](../../Projektplanung/Klassendiagramm_Code.md).
+Each team member's schwerpunkt-specific view of this diagram is described in
+their individual planning document (`planning_backend_darnell.md`,
+`planning_frontend_alessio.md`, `planning_db_kaiss.md`).
 
 ## 10. Sequence Diagrams
 
@@ -407,7 +423,7 @@ The process begins in the user interface. The request is forwarded to the
 controller, which calls the service layer. The service validates the request,
 updates the animal and inventory data and stores the changes in the database.
 
-*Insert Mermaid sequence diagram.*
+See [`Projektplanung/Sequence_AnimalFeeding.md`](../../Projektplanung/Sequence_AnimalFeeding.md) for the full Mermaid sequence diagram.
 
 ---
 
@@ -418,7 +434,7 @@ This sequence diagram illustrates how a veterinarian treats an animal.
 The service validates the selected medication, updates the animal's health,
 reduces the medication stock and stores the changes in the database.
 
-*Insert Mermaid sequence diagram.*
+See [`Projektplanung/Sequence_VeterinaryTreatment.md`](../../Projektplanung/Sequence_VeterinaryTreatment.md) for the full Mermaid sequence diagram.
 
 ---
 
@@ -430,7 +446,7 @@ The SimulationService starts the SimulationEngine, which updates environmental
 conditions, scheduled events, animal states and enclosure conditions before the
 updated state is returned to the user interface.
 
-*Insert Mermaid sequence diagram.*
+See [`Projektplanung/Sequence_SimulationStep.md`](../../Projektplanung/Sequence_SimulationStep.md) for the full Mermaid sequence diagram.
 
 ## 11. Simulation Design
 
@@ -535,7 +551,10 @@ model.
 
 ### Database Schema
 
-*Insert ER diagram or database schema here.*
+The ER diagram and table definitions (including primary and foreign keys) are
+maintained in [`Projektplanung/ER_Diagram_Data_Model.md`](../../Projektplanung/ER_Diagram_Data_Model.md).
+See also [`planning_db_kaiss.md`](planning_db_kaiss.md) for the SQLite-specific
+schema details.
 
 ## 13. Design Patterns
 
@@ -558,8 +577,8 @@ selected without modifying existing code.
 
 ### MVC-inspired Structure
 
-Although the application is console-based, it separates presentation,
-application logic and data management into different layers.
+The Flask-based web frontend separates presentation, application logic and
+data management into different layers.
 
 ## 14. Test Plan
 

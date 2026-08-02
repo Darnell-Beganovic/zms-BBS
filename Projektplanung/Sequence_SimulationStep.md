@@ -50,5 +50,3 @@ sequenceDiagram
     Service-->>Controller: simulation result
     Controller-->>View: display updated status
 ```
-
-Note: Soll ich diese Datei in `Projektplanung/UserStories_UseCases.md` verlinken oder weitere Sequenzdiagramme erstellen?

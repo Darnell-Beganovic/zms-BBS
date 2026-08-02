@@ -28,5 +28,3 @@ graph LR
   - Stakeholder list is complete
   - Prioritized requirements are documented
   - Open questions and assumptions are recorded
-
-Next step: Review the diagram and requirements in `Projektplanung/Stakeholder_Anforderungen.md`. Say `next` when I should proceed to `User Stories / Use Cases`.
