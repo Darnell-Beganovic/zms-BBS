@@ -14,8 +14,12 @@ The Database focus area covers:
 - The `DatabaseConnection` abstraction and its SQLite implementation.
 - All concrete `SQL*Repository` classes implementing the repository
   interfaces owned by the Backend focus (Darnell).
-- CSV and Excel export of report data (`ReportService` depends on the
-  repository `get_as_dataframe()` methods).
+- `ReportService` (in `services/report_service.py`): builds animal,
+  financial and inventory reports on top of the repositories'
+  `get_as_dataframe()` methods and exports them as CSV/Excel. It lives in
+  the `services/` folder for architectural reasons (Service Layer), but is
+  owned by the Database focus since it is purely a thin layer over the
+  repository data.
 
 Only SQLite is planned as a persistence backend (see NFR-03 in
 `../../Projektplanung/Funktionale_und_nichtfunktionale_Anforderungen.md` and
@@ -84,11 +88,26 @@ classDiagram
         +get_as_dataframe() DataFrame
     }
 
+    class ReportService {
+        -AnimalRepository animal_repository
+        -FinanceRepository finance_repository
+        -InventoryRepository inventory_repository
+        +create_animal_report() DataFrame
+        +create_financial_report() DataFrame
+        +create_inventory_report() DataFrame
+        +export_csv(data: DataFrame, file_path: str) void
+        +export_excel(data: DataFrame, file_path: str) void
+    }
+
     DatabaseConnection <|.. SQLiteConnection
     AnimalRepository <|.. SQLAnimalRepository
     FinanceRepository <|.. SQLFinanceRepository
     SQLAnimalRepository --> DatabaseConnection
     SQLFinanceRepository --> DatabaseConnection
+
+    ReportService --> AnimalRepository
+    ReportService --> FinanceRepository
+    ReportService --> InventoryRepository
 ```
 
 ## 3. Database Schema

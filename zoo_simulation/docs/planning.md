@@ -62,7 +62,7 @@ Primary responsibilities:
 - Repository pattern
 - Data persistence
 - Inventory and finance repositories
-- CSV and Excel report generation
+- CSV and Excel report generation (`ReportService`)
 
 See [`planning_db_kaiss.md`](planning_db_kaiss.md) for the detailed individual planning.
 
@@ -243,11 +243,12 @@ The application consists of the following layers:
 |--------|----------------|-----------------|-------|
 | Presentation Layer | Displays information and receives user input via Flask views/templates | ZooView (Flask routes & templates) | Alessio (Frontend) |
 | Controller Layer | Coordinates user requests and application flow | ZooController | Darnell (Backend) |
-| Service Layer | Contains business logic | ZooService, SimulationService, ReportService | Darnell (Backend) |
+| Service Layer | Contains business logic | ZooService, SimulationService | Darnell (Backend) |
 | Domain Layer | Represents the object-oriented zoo model | Animal, Employee, Zoo, Inventory, Enclosure | Darnell (Backend) |
 | Simulation Layer | Controls simulation behaviour and scheduled events | SimulationEngine, EventScheduler, EnvironmentalFactor | Darnell (Backend) |
 | Repository Layer | Provides an abstraction for database access | Repository Interfaces | Kaiss (Database) |
 | Persistence Layer | Stores application data | SQLite, DatabaseConnection | Kaiss (Database) |
+| Reporting Layer | Builds and exports CSV/Excel reports from repository data | ReportService | Kaiss (Database) |
 
 ### 7.2 Architecture Diagram
 
@@ -365,7 +366,7 @@ Each class has one clearly defined responsibility.
 Examples:
 
 - ZooService manages business logic.
-- ReportService generates reports.
+- ReportService generates reports (owned by the Database focus, Kaiss).
 - SimulationEngine executes simulation steps.
 
 **Open/Closed Principle (OCP)**
