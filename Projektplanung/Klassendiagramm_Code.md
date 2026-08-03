@@ -10,11 +10,11 @@ classDiagram
     %% =========================
 
     class ZooView {
+        <<Flask blueprint>>
         +show_zoo_status(data: DataFrame) void
         +show_animals(data: DataFrame) void
         +show_financial_report(data: DataFrame) void
         +show_message(message: str) void
-        +get_user_command() str
     }
 
     class ZooController {
@@ -333,18 +333,6 @@ classDiagram
         +close() void
     }
 
-    class MySQLConnection {
-        -str host
-        -str database_name
-        -str username
-        -str password
-        +connect() void
-        +execute(query: str, parameters: tuple) object
-        +commit() void
-        +rollback() void
-        +close() void
-    }
-
     class SQLZooRepository {
         -DatabaseConnection connection
         +save(zoo: Zoo) void
@@ -404,7 +392,6 @@ classDiagram
     Behavior <|-- RestBehavior
 
     DatabaseConnection <|.. SQLiteConnection
-    DatabaseConnection <|.. MySQLConnection
 
     ZooRepository <|.. SQLZooRepository
     AnimalRepository <|.. SQLAnimalRepository
