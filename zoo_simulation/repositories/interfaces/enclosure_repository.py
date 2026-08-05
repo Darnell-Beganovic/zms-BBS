@@ -33,16 +33,21 @@ class EnclosureRepository(ABC):
     """
 
     @abstractmethod
-    def save(self, enclosure: Enclosure) -> None:
+    def save(self, enclosure: Enclosure, zoo_id: int) -> None:
         """Persist a new Enclosure.
 
         Args:
             enclosure (Enclosure): the Enclosure instance to insert.
+            zoo_id (int): id of the Zoo the enclosure belongs to. Enclosure
+                itself carries no zoo_id attribute (see the class
+                diagram); this mirrors how AnimalRepository.save() takes
+                enclosure_id separately since Animal carries no
+                enclosure_id attribute either.
 
         Test:
-            - Any implementation, given a new, valid Enclosure object, when
-              save() is called, must make it retrievable via get_by_id()
-              afterwards with matching data.
+            - Any implementation, given a new, valid Enclosure object and
+              an existing zoo_id, when save() is called, must make it
+              retrievable via get_by_id() afterwards with matching data.
             - Any implementation, given an Enclosure with an id that
               already exists, when save() is called, must not silently
               create a conflicting duplicate row (update() exists
