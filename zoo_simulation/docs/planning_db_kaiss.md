@@ -86,7 +86,7 @@ classDiagram
 
     class EmployeeRepository {
         <<interface>>
-        +save(employee: Employee) void
+        +save(employee: Employee, zoo_id: int) void
         +get_by_id(employee_id: int) Employee
         +get_all() list
         +update(employee: Employee) void
@@ -144,11 +144,12 @@ classDiagram
 
     class SQLEmployeeRepository {
         -DatabaseConnection connection
-        +save(employee: Employee) void
+        +save(employee: Employee, zoo_id: int) void
         +get_by_id(employee_id: int) Employee
         +get_all() list
         +update(employee: Employee) void
         +delete(employee_id: int) void
+        #row_to_employee(row: Row) Employee
     }
 
     class SQLInventoryRepository {
@@ -269,3 +270,7 @@ the planning document.
   same reason: `Enclosure` carries no `zoo_id` attribute in the class
   diagram. Unlike Animal's enclosure_id, an Enclosure's zoo assignment never
   changes after creation, so `update()` does not take a `zoo_id` parameter.
+- `EmployeeRepository.save()` takes `zoo_id` as a separate parameter for the
+  same reason: `Employee` carries no `zoo_id` attribute in the class
+  diagram. As with Enclosure, an Employee's zoo assignment never changes
+  after hiring, so `update()` does not take a `zoo_id` parameter either.

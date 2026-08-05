@@ -301,7 +301,7 @@ classDiagram
 
     class EmployeeRepository {
         <<interface>>
-        +save(employee: Employee) void
+        +save(employee: Employee, zoo_id: int) void
         +get_by_id(employee_id: int) Employee
         +get_all() list
         +update(employee: Employee) void
@@ -382,11 +382,12 @@ classDiagram
 
     class SQLEmployeeRepository {
         -DatabaseConnection connection
-        +save(employee: Employee) void
+        +save(employee: Employee, zoo_id: int) void
         +get_by_id(employee_id: int) Employee
         +get_all() list
         +update(employee: Employee) void
         +delete(employee_id: int) void
+        #row_to_employee(row: Row) Employee
     }
 
     class SQLInventoryRepository {
