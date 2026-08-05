@@ -34,13 +34,17 @@ class EmployeeRepository(ABC):
     """
 
     @abstractmethod
-    def save(self, employee: Employee) -> None:
+    def save(self, employee: Employee, zoo_id: int) -> None:
         """Persist a new Employee.
 
         Args:
             employee (Employee): the Employee instance to insert (any
                 concrete subclass: Zookeeper, Veterinarian, Administrator,
                 ...).
+            zoo_id (int): id of the Zoo the employee belongs to. Employee
+                carries no zoo_id attribute (see the class diagram), so it
+                is supplied separately, mirroring how AnimalRepository
+                takes enclosure_id and EnclosureRepository takes zoo_id.
 
         Test:
             - Any implementation, given a new, valid Employee object, when
