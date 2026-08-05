@@ -95,11 +95,11 @@ classDiagram
 
     class InventoryRepository {
         <<interface>>
-        +save_item(item: FoodItem) void
+        +save_item(item: FoodItem, inventory_id: int) void
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
-        +save_medication(medication: Medication) void
+        +save_medication(medication: Medication, inventory_id: int) void
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
@@ -108,7 +108,7 @@ classDiagram
 
     class FinanceRepository {
         <<interface>>
-        +save_transaction(transaction: Transaction) void
+        +save_transaction(transaction: Transaction, zoo_id: int) void
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
@@ -154,23 +154,26 @@ classDiagram
 
     class SQLInventoryRepository {
         -DatabaseConnection connection
-        +save_item(item: FoodItem) void
+        +save_item(item: FoodItem, inventory_id: int) void
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
-        +save_medication(medication: Medication) void
+        +save_medication(medication: Medication, inventory_id: int) void
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
+        #row_to_food_item(row: Row) FoodItem
+        #row_to_medication(row: Row) Medication
     }
 
     class SQLFinanceRepository {
         -DatabaseConnection connection
-        +save_transaction(transaction: Transaction) void
+        +save_transaction(transaction: Transaction, zoo_id: int) void
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
+        #row_to_transaction(row: Row) Transaction
     }
 
     class ReportService {
@@ -274,3 +277,12 @@ the planning document.
   same reason: `Employee` carries no `zoo_id` attribute in the class
   diagram. As with Enclosure, an Employee's zoo assignment never changes
   after hiring, so `update()` does not take a `zoo_id` parameter either.
+- `InventoryRepository.save_item()`/`save_medication()` take `inventory_id`
+  as a separate parameter for the same reason: `FoodItem`/`Medication`
+  carry no `inventory_id` attribute in the class diagram. As with
+  Enclosure/Employee, the inventory assignment never changes after
+  creation, so `update_item()`/`update_medication()` do not take an
+  `inventory_id` parameter.
+- `FinanceRepository.save_transaction()` takes `zoo_id` as a separate
+  parameter for the same reason: `Transaction` carries no `zoo_id`
+  attribute in the class diagram.

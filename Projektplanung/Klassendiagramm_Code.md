@@ -310,11 +310,11 @@ classDiagram
 
     class InventoryRepository {
         <<interface>>
-        +save_item(item: FoodItem) void
+        +save_item(item: FoodItem, inventory_id: int) void
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
-        +save_medication(medication: Medication) void
+        +save_medication(medication: Medication, inventory_id: int) void
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
@@ -323,7 +323,7 @@ classDiagram
 
     class FinanceRepository {
         <<interface>>
-        +save_transaction(transaction: Transaction) void
+        +save_transaction(transaction: Transaction, zoo_id: int) void
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
@@ -392,23 +392,26 @@ classDiagram
 
     class SQLInventoryRepository {
         -DatabaseConnection connection
-        +save_item(item: FoodItem) void
+        +save_item(item: FoodItem, inventory_id: int) void
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
-        +save_medication(medication: Medication) void
+        +save_medication(medication: Medication, inventory_id: int) void
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
+        #row_to_food_item(row: Row) FoodItem
+        #row_to_medication(row: Row) Medication
     }
 
     class SQLFinanceRepository {
         -DatabaseConnection connection
-        +save_transaction(transaction: Transaction) void
+        +save_transaction(transaction: Transaction, zoo_id: int) void
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
+        #row_to_transaction(row: Row) Transaction
     }
 
     %% =========================
