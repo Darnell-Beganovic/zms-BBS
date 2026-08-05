@@ -56,6 +56,7 @@ classDiagram
         +commit() void
         +rollback() void
         +close() void
+        #require_connection() Connection
     }
 
     class ZooRepository {
@@ -118,6 +119,7 @@ classDiagram
         +save(zoo: Zoo) void
         +get_by_id(zoo_id: int) Zoo
         +update(zoo: Zoo) void
+        #row_to_zoo(row: Row) Zoo
     }
 
     class SQLAnimalRepository {
@@ -128,6 +130,7 @@ classDiagram
         +update(animal: Animal, enclosure_id: int) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
+        #row_to_animal(row: Row) Animal
     }
 
     class SQLEnclosureRepository {
