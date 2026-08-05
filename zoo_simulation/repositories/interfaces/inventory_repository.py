@@ -40,16 +40,22 @@ class InventoryRepository(ABC):
     """
 
     @abstractmethod
-    def save_item(self, item: FoodItem) -> None:
+    def save_item(self, item: FoodItem, inventory_id: int) -> None:
         """Persist a new FoodItem.
 
         Args:
             item (FoodItem): the FoodItem instance to insert.
+            inventory_id (int): id of the Inventory the item belongs to.
+                FoodItem carries no inventory_id attribute (see the class
+                diagram), so it is supplied separately, mirroring how
+                AnimalRepository takes enclosure_id and EnclosureRepository
+                takes zoo_id.
 
         Test:
-            - Any implementation, given a new, valid FoodItem, when
-              save_item() is called, must make it retrievable via
-              get_item() afterwards with matching data.
+            - Any implementation, given a new, valid FoodItem and an
+              existing inventory_id, when save_item() is called, must
+              make it retrievable via get_item() afterwards with matching
+              data.
             - Any implementation, given a FoodItem with an id that already
               exists, when save_item() is called, must not silently
               create a conflicting duplicate row (update_item() exists
@@ -114,11 +120,15 @@ class InventoryRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def save_medication(self, medication: Medication) -> None:
+    def save_medication(self, medication: Medication, inventory_id: int) -> None:
         """Persist a new Medication.
 
         Args:
             medication (Medication): the Medication instance to insert.
+            inventory_id (int): id of the Inventory the medication belongs
+                to. Medication carries no inventory_id attribute (see the
+                class diagram), so it is supplied separately, the same
+                way save_item() takes it for FoodItem.
 
         Test:
             - Any implementation, given a new, valid Medication, when

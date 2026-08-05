@@ -37,12 +37,16 @@ class FinanceRepository(ABC):
     """
 
     @abstractmethod
-    def save_transaction(self, transaction: Transaction) -> None:
+    def save_transaction(self, transaction: Transaction, zoo_id: int) -> None:
         """Persist a new Transaction.
 
         Args:
             transaction (Transaction): the Transaction instance to insert
                 (e.g. a ticket sale income or a feed cost expense).
+            zoo_id (int): id of the Zoo the transaction belongs to.
+                Transaction carries no zoo_id attribute (see the class
+                diagram), so it is supplied separately, mirroring
+                AnimalRepository/EnclosureRepository/EmployeeRepository.
 
         Test:
             - Any implementation, given a new, valid Transaction, when
