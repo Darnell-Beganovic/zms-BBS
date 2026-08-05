@@ -293,7 +293,7 @@ classDiagram
 
     class EnclosureRepository {
         <<interface>>
-        +save(enclosure: Enclosure) void
+        +save(enclosure: Enclosure, zoo_id: int) void
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
@@ -373,10 +373,11 @@ classDiagram
 
     class SQLEnclosureRepository {
         -DatabaseConnection connection
-        +save(enclosure: Enclosure) void
+        +save(enclosure: Enclosure, zoo_id: int) void
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
+        #row_to_enclosure(row: Row) Enclosure
     }
 
     class SQLEmployeeRepository {

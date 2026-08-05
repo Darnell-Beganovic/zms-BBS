@@ -78,7 +78,7 @@ classDiagram
 
     class EnclosureRepository {
         <<interface>>
-        +save(enclosure: Enclosure) void
+        +save(enclosure: Enclosure, zoo_id: int) void
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
@@ -135,10 +135,11 @@ classDiagram
 
     class SQLEnclosureRepository {
         -DatabaseConnection connection
-        +save(enclosure: Enclosure) void
+        +save(enclosure: Enclosure, zoo_id: int) void
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
+        #row_to_enclosure(row: Row) Enclosure
     }
 
     class SQLEmployeeRepository {
@@ -264,3 +265,7 @@ the planning document.
   `enclosure_id=None` as "leave the current assignment unchanged", not as
   "unassign" — explicitly clearing an animal's enclosure is not a current
   requirement.
+- `EnclosureRepository.save()` takes `zoo_id` as a separate parameter for the
+  same reason: `Enclosure` carries no `zoo_id` attribute in the class
+  diagram. Unlike Animal's enclosure_id, an Enclosure's zoo assignment never
+  changes after creation, so `update()` does not take a `zoo_id` parameter.
