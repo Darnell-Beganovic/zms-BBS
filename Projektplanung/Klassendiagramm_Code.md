@@ -36,6 +36,7 @@ classDiagram
         -ZooRepository zoo_repository
         -AnimalRepository animal_repository
         -EnclosureRepository enclosure_repository
+        -EmployeeRepository employee_repository
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
@@ -276,12 +277,16 @@ classDiagram
         +update(zoo: Zoo) void
     }
 
+    %% enclosure_id is passed separately from the Animal object because
+    %% Animal itself carries no enclosure_id attribute (unidirectional
+    %% aggregation Enclosure o-- Animal); this mirrors
+    %% ZooService.add_animal(animal, enclosure_id) below.
     class AnimalRepository {
         <<interface>>
-        +save(animal: Animal) void
+        +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal) void
+        +update(animal: Animal, enclosure_id: int) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
     }
@@ -294,12 +299,25 @@ classDiagram
         +update(enclosure: Enclosure) void
     }
 
+    class EmployeeRepository {
+        <<interface>>
+        +save(employee: Employee) void
+        +get_by_id(employee_id: int) Employee
+        +get_all() list
+        +update(employee: Employee) void
+        +delete(employee_id: int) void
+    }
+
     class InventoryRepository {
         <<interface>>
         +save_item(item: FoodItem) void
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +save_medication(medication: Medication) void
+        +get_medication(medication_id: int) Medication
+        +get_all_medications() list
+        +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
     }
 
@@ -342,10 +360,10 @@ classDiagram
 
     class SQLAnimalRepository {
         -DatabaseConnection connection
-        +save(animal: Animal) void
+        +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal) void
+        +update(animal: Animal, enclosure_id: int) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
     }
@@ -358,12 +376,25 @@ classDiagram
         +update(enclosure: Enclosure) void
     }
 
+    class SQLEmployeeRepository {
+        -DatabaseConnection connection
+        +save(employee: Employee) void
+        +get_by_id(employee_id: int) Employee
+        +get_all() list
+        +update(employee: Employee) void
+        +delete(employee_id: int) void
+    }
+
     class SQLInventoryRepository {
         -DatabaseConnection connection
         +save_item(item: FoodItem) void
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +save_medication(medication: Medication) void
+        +get_medication(medication_id: int) Medication
+        +get_all_medications() list
+        +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
     }
 
@@ -396,6 +427,7 @@ classDiagram
     ZooRepository <|.. SQLZooRepository
     AnimalRepository <|.. SQLAnimalRepository
     EnclosureRepository <|.. SQLEnclosureRepository
+    EmployeeRepository <|.. SQLEmployeeRepository
     InventoryRepository <|.. SQLInventoryRepository
     FinanceRepository <|.. SQLFinanceRepository
 
@@ -442,6 +474,7 @@ classDiagram
     ZooService --> ZooRepository
     ZooService --> AnimalRepository
     ZooService --> EnclosureRepository
+    ZooService --> EmployeeRepository
     ZooService --> InventoryRepository
     ZooService --> FinanceRepository
 
@@ -458,6 +491,7 @@ classDiagram
     SQLZooRepository --> DatabaseConnection
     SQLAnimalRepository --> DatabaseConnection
     SQLEnclosureRepository --> DatabaseConnection
+    SQLEmployeeRepository --> DatabaseConnection
     SQLInventoryRepository --> DatabaseConnection
     SQLFinanceRepository --> DatabaseConnection
 ```
