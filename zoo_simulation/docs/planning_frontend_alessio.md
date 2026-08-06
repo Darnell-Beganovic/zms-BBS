@@ -37,7 +37,7 @@ classDiagram
     class ZooView {
         <<Flask blueprint>>
         +show_zoo_status(data: DataFrame) Response
-        +show_animals(data: DataFrame) Response
+        +show_animals(data: DataFrame, view: str) Response
         +show_financial_report(data: DataFrame) Response
         +show_message(message: str) Response
         +handle_feed_animal_form(request: Request) Response
@@ -204,6 +204,16 @@ below; they are **not** implemented as automated pytest code.
   with `format=csv`, then a downloadable CSV file is returned.
 - TC-F08: Given financial data exists, when the report route is requested
   with `format=xlsx`, then a downloadable Excel file is returned.
+
+### `show_animals(data, view)`
+
+- TC-F09: Given animals assigned to several enclosures, when the route is
+  requested without a `view` parameter (or `view=game`), then the 2D game
+  board is rendered with one boxed pen per enclosure and every animal
+  placed in its correct pen.
+- TC-F10: Given the same data, when the route is requested with
+  `view=list`, then the original plain HTML table is rendered instead,
+  with one row per animal — no game-board markup.
 
 ## 6. Open Questions / Assumptions
 
