@@ -37,8 +37,21 @@ Gehege als Boxen mit umherwandernden Tier-Sprites, Klick oeffnet ein Popup
 mit Fuetterungsformular) statt der urspruenglichen Tabelle
 (`templates/animals.html`, weiterhin ueber `?view=list` erreichbar). Das ist
 reine Praesentation ueber denselben `ZooController.show_status()`-Aufruf -
-CSS/JS liegen getrennt in `static/css/`/`static/js/`, ausgeliefert ueber
-Flasks automatische `/static`-Route (kein zusaetzlicher Python-Code noetig).
+CSS/JS liegen getrennt in `static/css/`/`static/js/`.
+
+Statische Assets werden ueber die EIGENE `static_folder`/`static_url_path`
+des Blueprints ausgeliefert (Endpoint `zoo.static`, siehe `zoo_bp` unten),
+nicht ueber Flasks App-weite `/static`-Route. Grund: Flasks App-weite
+`/static`-Route zeigt auf einen Ordner relativ zum `__name__` der Datei, die
+die `Flask`-App instanziiert - das ist bisher zufaellig `dev_app.py` (liegt
+im selben Ordner wie `static/`), wird aber der eigentliche Einstiegspunkt
+`main.py` im Projekt-Root sein (siehe `planning.md`), sobald die Integration
+steht. Dessen `Flask(__name__)` wuerde dann `<project-root>/static/` suchen,
+nicht `zoo_simulation/frontend/static/` - die Assets waeren 404. Indem der
+Blueprint seinen `static`-Ordner selbst deklariert, ist die Auslieferung
+unabhaengig davon, wo/wie die App-Instanz erzeugt wird. Templates verweisen
+deshalb auf `url_for('zoo.static', filename=...)`, nicht `url_for('static',
+filename=...)`.
 """
 
 from __future__ import annotations
@@ -60,7 +73,13 @@ from flask import Blueprint, flash, redirect, render_template, request, send_fil
 
 from zoo_simulation.frontend.controller_stub import MockZooController as ZooController
 
-zoo_bp = Blueprint("zoo", __name__, template_folder="templates")
+zoo_bp = Blueprint(
+    "zoo",
+    __name__,
+    template_folder="templates",
+    static_folder="static",
+    static_url_path="/frontend/static",
+)
 
 # Erlaubte Werte fuer den `format`-Query-Parameter von `/reports/financial`.
 # `None` steht fuer "kein Parameter angegeben" (request.args.get() liefert

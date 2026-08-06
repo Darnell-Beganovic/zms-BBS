@@ -3,7 +3,7 @@
 {% block title %}Tiere – Spielansicht – Zoo Management System{% endblock %}
 
 {% block head %}
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/game.css') }}">
+  <link rel="stylesheet" href="{{ url_for('zoo.static', filename='css/game.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -51,6 +51,6 @@
 {% endblock %}
 
 {% block scripts %}
-  <script src="{{ url_for('static', filename='js/animation.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/game.js') }}"></script>
+  <script src="{{ url_for('zoo.static', filename='js/animation.js') }}"></script>
+  <script src="{{ url_for('zoo.static', filename='js/game.js') }}"></script>
 {% endblock %}
