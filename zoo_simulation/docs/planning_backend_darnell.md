@@ -128,33 +128,57 @@ classDiagram
         +grow_older() void*
         +update() void
         +calculate_welfare() float
+        +adjust_health(delta: int) void
+        +adjust_hunger(delta: int) void
+        +adjust_energy(delta: int) void
         #validate_value(value: int) int
     }
 
     class Lion {
+        -str food_preference
         +eat(food: FoodItem) void
         +sleep() void
         +move() str
         +grow_older() void
+        +typical_behavior() str
     }
 
     class Giraffe {
+        -str food_preference
         +eat(food: FoodItem) void
         +sleep() void
         +move() str
         +grow_older() void
+        +typical_behavior() str
     }
 
     class Penguin {
+        -str food_preference
         +eat(food: FoodItem) void
         +sleep() void
         +move() str
         +grow_older() void
+        +typical_behavior() str
     }
 
     class Behavior {
         <<abstract>>
         +execute(animal: Animal) void*
+    }
+
+    class FeedingBehavior {
+        -str food_preference
+        +execute(animal: Animal) void
+    }
+
+    class SocialBehavior {
+        -int social_level
+        +execute(animal: Animal) void
+    }
+
+    class RestBehavior {
+        -int rest_duration
+        +execute(animal: Animal) void
     }
 
     class SimulationEngine {
@@ -182,6 +206,10 @@ classDiagram
     Animal <|-- Lion
     Animal <|-- Giraffe
     Animal <|-- Penguin
+
+    Behavior <|-- FeedingBehavior
+    Behavior <|-- SocialBehavior
+    Behavior <|-- RestBehavior
 
     Animal *-- "1..*" Behavior : composed of
 
@@ -224,6 +252,36 @@ See `planning_frontend_alessio.md` sections 2.1/2.2 for the full rationale
 agreed with Alessio, including why `ZooView`'s own methods keep the
 `Response` return type in the diagram despite Flask view functions
 returning plain `str` in the actual code.
+
+### 2.2 Behavior Composition & Animal Encapsulation (agreed 2026-08-06)
+
+`Behavior` (and its subclasses `FeedingBehavior`, `SocialBehavior`,
+`RestBehavior`, matching the full diagram in
+`../../Projektplanung/Klassendiagramm_Code.md`) was present in this
+document's diagram only as an abstract class before this addition - the
+concrete subclasses and their composition into `Animal` are functional,
+not just structural: `Animal.update()` iterates over its composed
+Behaviors and calls `execute(self)` on each once per simulation tick.
+Each Behavior affects exactly one stat in isolation (hunger, energy or
+health) - there is deliberately no blending or interaction between
+multiple Behaviors on the same Animal, to keep this composition simple
+per aufgabe.md's "Komposition" requirement in Teilbereich 2, without
+over-engineering emergent behavior.
+
+Since `Behavior.execute(animal)` is a separate class, not an `Animal`
+subclass, it cannot reach `Animal`'s private `_health`/`_hunger`/
+`_energy` attributes directly without breaking Kapselung. `Animal`
+therefore exposes three new public mutator methods -
+`adjust_health(delta)`, `adjust_hunger(delta)`, `adjust_energy(delta)` -
+that route every change through the existing `#validate_value()` clamp,
+so external Behavior objects can only ever move a stat within its valid
+0-100 range, never set it directly or push it out of range. These three
+methods are additions to the class diagram versus the original
+"Beispiel (abwandelbar)" sketch in `aufgabe.md`; `Lion`/`Giraffe`/
+`Penguin`'s `-food_preference` attribute and `+typical_behavior()`
+method were likewise adopted from the full diagram (aufgabe.md
+Teilbereich 2 explicitly names "Nahrungspräferenzen" and
+"typischesVerhalten()").
 
 ## 3. OOP Principles Applied in the Backend
 

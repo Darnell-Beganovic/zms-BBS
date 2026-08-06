@@ -194,6 +194,9 @@ classDiagram
         +grow_older() void*
         +update() void
         +calculate_welfare() float
+        +adjust_health(delta: int) void
+        +adjust_hunger(delta: int) void
+        +adjust_energy(delta: int) void
         #validate_value(value: int) int
     }
 
