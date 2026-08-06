@@ -17,15 +17,22 @@ classDiagram
         +show_message(message: str) void
     }
 
+    %% NOTE (2026-08-06, agreed Frontend/Backend): ZooController methods
+    %% return a uniform result dict {"success": bool, "message": str,
+    %% "data": Any} instead of void, so ZooView can render success/error
+    %% messages and the returned data without touching the service layer.
+    %% sell_ticket() was added to close a gap between the frontend route
+    %% table (/tickets/buy) and this diagram, which had no ticket method.
     class ZooController {
         -ZooService zoo_service
         -SimulationService simulation_service
         -ReportService report_service
-        +show_status() void
-        +add_animal(data: dict) void
-        +feed_animal(animal_id: int, food_id: int) void
-        +run_simulation_step() void
-        +create_report() void
+        +show_status() dict
+        +add_animal(data: dict) dict
+        +feed_animal(animal_id: int, food_id: int) dict
+        +sell_ticket(price: float) dict
+        +run_simulation_step() dict
+        +create_report(format: str) dict
     }
 
     %% =========================
