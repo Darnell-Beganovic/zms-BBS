@@ -33,7 +33,7 @@ class EnclosureRepository(ABC):
     """
 
     @abstractmethod
-    def save(self, enclosure: Enclosure, zoo_id: int) -> None:
+    def save(self, enclosure: Enclosure, zoo_id: int) -> int:
         """Persist a new Enclosure.
 
         Args:
@@ -44,10 +44,21 @@ class EnclosureRepository(ABC):
                 enclosure_id separately since Animal carries no
                 enclosure_id attribute either.
 
+        Returns:
+            int: the enclosure_id assigned by the database (e.g. read
+            back via cursor.lastrowid after the INSERT). Implementations
+            must also set this id on the passed-in `enclosure` instance
+            before returning, so the caller's reference is immediately
+            usable for get_by_id()/update() without a re-fetch.
+
         Test:
             - Any implementation, given a new, valid Enclosure object and
-              an existing zoo_id, when save() is called, must make it
-              retrievable via get_by_id() afterwards with matching data.
+              an existing zoo_id, when save() is called, must return the
+              new enclosure_id, and that id must be retrievable via
+              get_by_id() afterwards with matching data.
+            - Any implementation, given a new, valid Enclosure object,
+              when save() is called, must also set enclosure.id to the
+              returned value.
             - Any implementation, given an Enclosure with an id that
               already exists, when save() is called, must not silently
               create a conflicting duplicate row (update() exists
