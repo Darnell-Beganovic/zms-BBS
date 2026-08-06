@@ -17,15 +17,22 @@ classDiagram
         +show_message(message: str) void
     }
 
+    %% NOTE (2026-08-06, agreed Frontend/Backend): ZooController methods
+    %% return a uniform result dict {"success": bool, "message": str,
+    %% "data": Any} instead of void, so ZooView can render success/error
+    %% messages and the returned data without touching the service layer.
+    %% sell_ticket() was added to close a gap between the frontend route
+    %% table (/tickets/buy) and this diagram, which had no ticket method.
     class ZooController {
         -ZooService zoo_service
         -SimulationService simulation_service
         -ReportService report_service
-        +show_status() void
-        +add_animal(data: dict) void
-        +feed_animal(animal_id: int, food_id: int) void
-        +run_simulation_step() void
-        +create_report() void
+        +show_status() dict
+        +add_animal(data: dict) dict
+        +feed_animal(animal_id: int, food_id: int) dict
+        +sell_ticket(price: float) dict
+        +run_simulation_step() dict
+        +create_report(format: str) dict
     }
 
     %% =========================
@@ -36,6 +43,7 @@ classDiagram
         -ZooRepository zoo_repository
         -AnimalRepository animal_repository
         -EnclosureRepository enclosure_repository
+        -EmployeeRepository employee_repository
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
@@ -276,22 +284,37 @@ classDiagram
         +update(zoo: Zoo) void
     }
 
+    %% enclosure_id is passed separately from the Animal object because
+    %% Animal itself carries no enclosure_id attribute (unidirectional
+    %% aggregation Enclosure o-- Animal); this mirrors
+    %% ZooService.add_animal(animal, enclosure_id) below.
+    %% update()'s enclosure_id is Optional: None means "leave the current
+    %% enclosure assignment unchanged", not "unassign".
     class AnimalRepository {
         <<interface>>
-        +save(animal: Animal) void
+        +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
     }
 
     class EnclosureRepository {
         <<interface>>
-        +save(enclosure: Enclosure) void
+        +save(enclosure: Enclosure, zoo_id: int) void
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
+    }
+
+    class EmployeeRepository {
+        <<interface>>
+        +save(employee: Employee, zoo_id: int) void
+        +get_by_id(employee_id: int) Employee
+        +get_all() list
+        +update(employee: Employee) void
+        +delete(employee_id: int) void
     }
 
     class InventoryRepository {
@@ -300,6 +323,10 @@ classDiagram
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +save_medication(medication: Medication) void
+        +get_medication(medication_id: int) Medication
+        +get_all_medications() list
+        +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
     }
 
@@ -331,6 +358,7 @@ classDiagram
         +commit() void
         +rollback() void
         +close() void
+        #require_connection() Connection
     }
 
     class SQLZooRepository {
@@ -338,24 +366,37 @@ classDiagram
         +save(zoo: Zoo) void
         +get_by_id(zoo_id: int) Zoo
         +update(zoo: Zoo) void
+        #row_to_zoo(row: Row) Zoo
     }
 
     class SQLAnimalRepository {
         -DatabaseConnection connection
-        +save(animal: Animal) void
+        +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
+        #row_to_animal(row: Row) Animal
     }
 
     class SQLEnclosureRepository {
         -DatabaseConnection connection
-        +save(enclosure: Enclosure) void
+        +save(enclosure: Enclosure, zoo_id: int) void
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
+        #row_to_enclosure(row: Row) Enclosure
+    }
+
+    class SQLEmployeeRepository {
+        -DatabaseConnection connection
+        +save(employee: Employee, zoo_id: int) void
+        +get_by_id(employee_id: int) Employee
+        +get_all() list
+        +update(employee: Employee) void
+        +delete(employee_id: int) void
+        #row_to_employee(row: Row) Employee
     }
 
     class SQLInventoryRepository {
@@ -364,6 +405,10 @@ classDiagram
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +save_medication(medication: Medication) void
+        +get_medication(medication_id: int) Medication
+        +get_all_medications() list
+        +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
     }
 
@@ -373,6 +418,7 @@ classDiagram
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
+        #row_to_transaction(row: Row) Transaction
     }
 
     %% =========================
@@ -396,6 +442,7 @@ classDiagram
     ZooRepository <|.. SQLZooRepository
     AnimalRepository <|.. SQLAnimalRepository
     EnclosureRepository <|.. SQLEnclosureRepository
+    EmployeeRepository <|.. SQLEmployeeRepository
     InventoryRepository <|.. SQLInventoryRepository
     FinanceRepository <|.. SQLFinanceRepository
 
@@ -442,6 +489,7 @@ classDiagram
     ZooService --> ZooRepository
     ZooService --> AnimalRepository
     ZooService --> EnclosureRepository
+    ZooService --> EmployeeRepository
     ZooService --> InventoryRepository
     ZooService --> FinanceRepository
 
@@ -458,6 +506,7 @@ classDiagram
     SQLZooRepository --> DatabaseConnection
     SQLAnimalRepository --> DatabaseConnection
     SQLEnclosureRepository --> DatabaseConnection
+    SQLEmployeeRepository --> DatabaseConnection
     SQLInventoryRepository --> DatabaseConnection
     SQLFinanceRepository --> DatabaseConnection
 ```
