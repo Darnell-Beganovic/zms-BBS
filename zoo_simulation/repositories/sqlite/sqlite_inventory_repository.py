@@ -73,23 +73,31 @@ class SQLInventoryRepository(InventoryRepository):
         """
         self._connection = connection
 
-    def save_item(self, item: FoodItem, inventory_id: int) -> None:
+    def save_item(self, item: FoodItem, inventory_id: int) -> int:
         """Insert a new FoodItem row.
 
         Args:
             item (FoodItem): the FoodItem instance to insert.
             inventory_id (int): id of the Inventory the item belongs to.
 
+        Returns:
+            int: the food_id assigned by SQLite (cursor.lastrowid). The
+            caller is responsible for making the id available on its own
+            FoodItem reference - this method does not assume `item.id` is
+            settable (FoodItem exposes `id` as a read-only property with
+            no setter).
+
         Test:
             - Given a new, valid FoodItem and an existing inventory_id,
-              when save_item() is called, then a new row is inserted and
-              get_item() afterwards returns matching data.
+              when save_item() is called, then the returned id is a
+              positive int and get_item() afterwards returns matching
+              data.
             - Given a database connection failure (e.g. a locked file),
               when save_item() is called, then the transaction is rolled
-              back and no partial row is written.
+              back, no partial row is written, and no id is returned.
         """
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO food_item
                     (inventory_id, name, food_type, quantity, price_per_unit, minimum_quantity)
@@ -105,6 +113,7 @@ class SQLInventoryRepository(InventoryRepository):
                 ),
             )
             self._connection.commit()
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise
@@ -183,7 +192,7 @@ class SQLInventoryRepository(InventoryRepository):
             self._connection.rollback()
             raise
 
-    def save_medication(self, medication: Medication, inventory_id: int) -> None:
+    def save_medication(self, medication: Medication, inventory_id: int) -> int:
         """Insert a new Medication row.
 
         Args:
@@ -191,17 +200,25 @@ class SQLInventoryRepository(InventoryRepository):
             inventory_id (int): id of the Inventory the medication belongs
                 to.
 
+        Returns:
+            int: the medication_id assigned by SQLite (cursor.lastrowid).
+            The caller is responsible for making the id available on its
+            own Medication reference - this method does not assume
+            `medication.id` is settable (Medication exposes `id` as a
+            read-only property with no setter).
+
         Test:
             - Given a new, valid Medication and an existing inventory_id,
-              when save_medication() is called, then a new row is
-              inserted and get_medication() afterwards returns matching
-              data.
+              when save_medication() is called, then the returned id is a
+              positive int and get_medication() afterwards returns
+              matching data.
             - Given a database connection failure (e.g. a locked file),
               when save_medication() is called, then the transaction is
-              rolled back and no partial row is written.
+              rolled back, no partial row is written, and no id is
+              returned.
         """
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO medication (inventory_id, name, quantity, minimum_quantity)
                 VALUES (?, ?, ?, ?)
@@ -209,6 +226,7 @@ class SQLInventoryRepository(InventoryRepository):
                 (inventory_id, medication.name, medication.quantity, medication.minimum_quantity),
             )
             self._connection.commit()
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise

@@ -40,7 +40,7 @@ class InventoryRepository(ABC):
     """
 
     @abstractmethod
-    def save_item(self, item: FoodItem, inventory_id: int) -> None:
+    def save_item(self, item: FoodItem, inventory_id: int) -> int:
         """Persist a new FoodItem.
 
         Args:
@@ -51,11 +51,19 @@ class InventoryRepository(ABC):
                 AnimalRepository takes enclosure_id and EnclosureRepository
                 takes zoo_id.
 
+        Returns:
+            int: the food_id assigned by the database (e.g. read back via
+            cursor.lastrowid after the INSERT). Implementations must NOT
+            assume the passed-in `item` instance's `id` is settable
+            (FoodItem exposes `id` as a read-only property with no
+            setter) - the caller is responsible for making the returned
+            id available on its own reference.
+
         Test:
             - Any implementation, given a new, valid FoodItem and an
               existing inventory_id, when save_item() is called, must
-              make it retrievable via get_item() afterwards with matching
-              data.
+              return the new food_id, and it must be retrievable via
+              get_item() afterwards with matching data.
             - Any implementation, given a FoodItem with an id that already
               exists, when save_item() is called, must not silently
               create a conflicting duplicate row (update_item() exists
@@ -120,7 +128,7 @@ class InventoryRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def save_medication(self, medication: Medication, inventory_id: int) -> None:
+    def save_medication(self, medication: Medication, inventory_id: int) -> int:
         """Persist a new Medication.
 
         Args:
@@ -130,9 +138,18 @@ class InventoryRepository(ABC):
                 class diagram), so it is supplied separately, the same
                 way save_item() takes it for FoodItem.
 
+        Returns:
+            int: the medication_id assigned by the database (e.g. read
+            back via cursor.lastrowid after the INSERT). Implementations
+            must NOT assume the passed-in `medication` instance's `id` is
+            settable (Medication exposes `id` as a read-only property
+            with no setter) - the caller is responsible for making the
+            returned id available on its own reference.
+
         Test:
             - Any implementation, given a new, valid Medication, when
-              save_medication() is called, must make it retrievable via
+              save_medication() is called, must return the new
+              medication_id, and it must be retrievable via
               get_medication() afterwards with matching data.
             - Any implementation, given a Medication with an id that
               already exists, when save_medication() is called, must not

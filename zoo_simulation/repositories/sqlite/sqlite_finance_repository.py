@@ -69,28 +69,36 @@ class SQLFinanceRepository(FinanceRepository):
         """
         self._connection = connection
 
-    def save_transaction(self, transaction: Transaction, zoo_id: int) -> None:
+    def save_transaction(self, transaction: Transaction, zoo_id: int) -> int:
         """Insert a new Transaction row.
 
         Args:
             transaction (Transaction): the Transaction instance to insert.
             zoo_id (int): id of the Zoo the transaction belongs to.
 
+        Returns:
+            int: the transaction_id assigned by SQLite (cursor.lastrowid).
+            The caller is responsible for making the id available on its
+            own Transaction reference - this method does not assume
+            `transaction.id` is settable (Transaction exposes `id` as a
+            read-only property with no setter).
+
         Test:
             - Given a new, valid Transaction and an existing zoo_id, when
-              save_transaction() is called, then a new row is inserted
-              and it appears in get_all_transactions() afterwards with
-              matching data.
+              save_transaction() is called, then the returned id is a
+              positive int and it appears in get_all_transactions()
+              afterwards with matching data.
             - Given a database connection failure (e.g. a locked file),
               when save_transaction() is called, then the transaction is
-              rolled back and no partial row is written.
+              rolled back, no partial row is written, and no id is
+              returned.
         """
         created_at = transaction.created_at
         if hasattr(created_at, "isoformat"):
             created_at = created_at.isoformat()
 
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO "transaction"
                     (zoo_id, transaction_type, amount, description, created_at)
@@ -100,6 +108,7 @@ class SQLFinanceRepository(FinanceRepository):
                  transaction.description, created_at),
             )
             self._connection.commit()
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise
