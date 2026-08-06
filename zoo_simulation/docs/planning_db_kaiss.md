@@ -12,8 +12,14 @@ The Database focus area covers:
 
 - Database design and the SQLite schema (`database/schema.sql`).
 - The `DatabaseConnection` abstraction and its SQLite implementation.
-- All concrete `SQL*Repository` classes implementing the repository
-  interfaces owned by the Backend focus (Darnell).
+- All Repository interfaces (`repositories/interfaces/`): `ZooRepository`,
+  `AnimalRepository`, `EnclosureRepository`, `EmployeeRepository`,
+  `InventoryRepository`, `FinanceRepository`. These define the contracts the
+  Backend focus (Darnell) programs against (Dependency Inversion Principle),
+  but the interfaces themselves belong to the Repository Layer, which is
+  owned by the Database focus (see the layer table in `planning.md` §7.1).
+- All concrete `SQL*Repository` classes (`repositories/sqlite/`) implementing
+  those interfaces.
 - `ReportService` (in `services/report_service.py`): builds animal,
   financial and inventory reports on top of the repositories'
   `get_as_dataframe()` methods and exports them as CSV/Excel. It lives in
@@ -50,15 +56,53 @@ classDiagram
         +commit() void
         +rollback() void
         +close() void
+        #require_connection() Connection
+    }
+
+    class ZooRepository {
+        <<interface>>
+        +save(zoo: Zoo) void
+        +get_by_id(zoo_id: int) Zoo
+        +update(zoo: Zoo) void
     }
 
     class AnimalRepository {
         <<interface>>
-        +save(animal: Animal) void
+        +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
+        +get_as_dataframe() DataFrame
+    }
+
+    class EnclosureRepository {
+        <<interface>>
+        +save(enclosure: Enclosure, zoo_id: int) void
+        +get_by_id(enclosure_id: int) Enclosure
+        +get_all() list
+        +update(enclosure: Enclosure) void
+    }
+
+    class EmployeeRepository {
+        <<interface>>
+        +save(employee: Employee, zoo_id: int) void
+        +get_by_id(employee_id: int) Employee
+        +get_all() list
+        +update(employee: Employee) void
+        +delete(employee_id: int) void
+    }
+
+    class InventoryRepository {
+        <<interface>>
+        +save_item(item: FoodItem) void
+        +get_item(item_id: int) FoodItem
+        +get_all_items() list
+        +update_item(item: FoodItem) void
+        +save_medication(medication: Medication) void
+        +get_medication(medication_id: int) Medication
+        +get_all_medications() list
+        +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
     }
 
@@ -70,13 +114,54 @@ classDiagram
         +get_as_dataframe() DataFrame
     }
 
+    class SQLZooRepository {
+        -DatabaseConnection connection
+        +save(zoo: Zoo) void
+        +get_by_id(zoo_id: int) Zoo
+        +update(zoo: Zoo) void
+        #row_to_zoo(row: Row) Zoo
+    }
+
     class SQLAnimalRepository {
         -DatabaseConnection connection
-        +save(animal: Animal) void
+        +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
+        +get_as_dataframe() DataFrame
+        #row_to_animal(row: Row) Animal
+    }
+
+    class SQLEnclosureRepository {
+        -DatabaseConnection connection
+        +save(enclosure: Enclosure, zoo_id: int) void
+        +get_by_id(enclosure_id: int) Enclosure
+        +get_all() list
+        +update(enclosure: Enclosure) void
+        #row_to_enclosure(row: Row) Enclosure
+    }
+
+    class SQLEmployeeRepository {
+        -DatabaseConnection connection
+        +save(employee: Employee, zoo_id: int) void
+        +get_by_id(employee_id: int) Employee
+        +get_all() list
+        +update(employee: Employee) void
+        +delete(employee_id: int) void
+        #row_to_employee(row: Row) Employee
+    }
+
+    class SQLInventoryRepository {
+        -DatabaseConnection connection
+        +save_item(item: FoodItem) void
+        +get_item(item_id: int) FoodItem
+        +get_all_items() list
+        +update_item(item: FoodItem) void
+        +save_medication(medication: Medication) void
+        +get_medication(medication_id: int) Medication
+        +get_all_medications() list
+        +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
     }
 
@@ -86,6 +171,7 @@ classDiagram
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
+        #row_to_transaction(row: Row) Transaction
     }
 
     class ReportService {
@@ -100,9 +186,17 @@ classDiagram
     }
 
     DatabaseConnection <|.. SQLiteConnection
+    ZooRepository <|.. SQLZooRepository
     AnimalRepository <|.. SQLAnimalRepository
+    EnclosureRepository <|.. SQLEnclosureRepository
+    EmployeeRepository <|.. SQLEmployeeRepository
+    InventoryRepository <|.. SQLInventoryRepository
     FinanceRepository <|.. SQLFinanceRepository
+    SQLZooRepository --> DatabaseConnection
     SQLAnimalRepository --> DatabaseConnection
+    SQLEnclosureRepository --> DatabaseConnection
+    SQLEmployeeRepository --> DatabaseConnection
+    SQLInventoryRepository --> DatabaseConnection
     SQLFinanceRepository --> DatabaseConnection
 
     ReportService --> AnimalRepository
@@ -118,10 +212,12 @@ maintained in
 Key relationships:
 
 - `ZOO (1) --- (N) ENCLOSURE` via `ENCLOSURE.zoo_id` (FK)
-- `ENCLOSURE (1) --- (N) ANIMAL` via `ANIMAL.enclosure_id` (FK)
+- `ENCLOSURE (0..1) --- (N) ANIMAL` via `ANIMAL.enclosure_id` (nullable FK; an
+  animal can exist without an enclosure, see Aggregation in `planning.md`
+  §8.5)
 - `ZOO (1) --- (1) INVENTORY` via `INVENTORY.zoo_id` (FK)
 - `INVENTORY (1) --- (N) FOOD_ITEM` / `MEDICATION` via `inventory_id` (FK)
-- `ZOO (1) --- (N) EMPLOYEE`, `TRANSACTION`, `SCHEDULED_EVENT` via `zoo_id` (FK)
+- `ZOO (1) --- (N) EMPLOYEE`, `TRANSACTION` via `zoo_id` (FK)
 
 ## 4. OOP Principles Applied in the Database Layer
 
@@ -139,43 +235,43 @@ Key relationships:
 
 ## 5. Test Descriptions (described, not implemented)
 
-Per the assignment, at least two test cases are described for each function
-below; they are **not** implemented as automated pytest code.
+Per the assignment, at least two test cases are described for each function;
+they are **not** implemented as automated pytest code. To avoid maintaining
+the same test descriptions in two places, the canonical location for each
+function's test cases is its own docstring (`Test:` section) in the source
+file — see e.g. `database/database_connection.py`,
+`repositories/sqlite/sqlite_animal_repository.py`,
+`repositories/sqlite/sqlite_finance_repository.py`,
+`repositories/sqlite/sqlite_inventory_repository.py`. This section only
+keeps a short pointer per class so the test scope is still discoverable from
+the planning document.
 
-### `SQLAnimalRepository.save(animal)`
-
-- TC-D01: Given a new, valid `Animal` object, when `save()` is called, then
-  a new row is inserted and `get_by_id()` afterwards returns matching data.
-- TC-D02: Given a database connection failure (e.g. locked file), when
-  `save()` is called, then the transaction is rolled back and no partial row
-  is written.
-
-### `SQLAnimalRepository.get_by_id(animal_id)`
-
-- TC-D03: Given an `animal_id` that exists, when `get_by_id()` is called,
-  then the returned `Animal` object's attributes match the stored row.
-- TC-D04: Given an `animal_id` that does not exist, when `get_by_id()` is
-  called, then `None` (or a domain-specific "not found" result) is returned
-  instead of raising an unhandled exception.
-
-### `SQLFinanceRepository.get_balance()`
-
-- TC-D05: Given transactions totalling +500 income and -200 expenses, when
-  `get_balance()` is called, then it returns 300.
-- TC-D06: Given no transactions exist yet, when `get_balance()` is called,
-  then it returns 0 instead of raising an error.
-
-### `SQLInventoryRepository.get_as_dataframe()` (used for CSV/Excel export)
-
-- TC-D07: Given 3 food items and 2 medications in inventory, when
-  `get_as_dataframe()` is called, then the resulting `DataFrame` has 5 rows
-  with the correct column names.
-- TC-D08: Given an empty inventory, when `get_as_dataframe()` is called,
-  then an empty `DataFrame` with the correct columns (not `None`) is
-  returned, so `ReportService` can still export a valid (empty) report.
+- `DatabaseConnection` / `SQLiteConnection` — see docstrings in
+  `database/database_connection.py`.
+- `SQL*Repository` classes (`ZooRepository`, `AnimalRepository`,
+  `EnclosureRepository`, `EmployeeRepository`, `InventoryRepository`,
+  `FinanceRepository` implementations) — see docstrings in
+  `repositories/sqlite/*.py`.
+- `ReportService` — see docstrings in `services/report_service.py`.
 
 ## 6. Open Questions / Assumptions
 
 - Migrations are handled by re-running `database/schema.sql` against a fresh
   SQLite file for now; a dedicated migration tool is out of scope given the
   project size.
+- `AnimalRepository.save()`/`update()` take `enclosure_id` as a separate
+  parameter rather than reading it off the `Animal` object, because `Animal`
+  carries no `enclosure_id` attribute in the class diagram (unidirectional
+  aggregation `Enclosure o-- Animal`). This mirrors
+  `ZooService.add_animal(animal, enclosure_id)`. `update()` treats
+  `enclosure_id=None` as "leave the current assignment unchanged", not as
+  "unassign" — explicitly clearing an animal's enclosure is not a current
+  requirement.
+- `EnclosureRepository.save()` takes `zoo_id` as a separate parameter for the
+  same reason: `Enclosure` carries no `zoo_id` attribute in the class
+  diagram. Unlike Animal's enclosure_id, an Enclosure's zoo assignment never
+  changes after creation, so `update()` does not take a `zoo_id` parameter.
+- `EmployeeRepository.save()` takes `zoo_id` as a separate parameter for the
+  same reason: `Employee` carries no `zoo_id` attribute in the class
+  diagram. As with Enclosure, an Employee's zoo assignment never changes
+  after hiring, so `update()` does not take a `zoo_id` parameter either.

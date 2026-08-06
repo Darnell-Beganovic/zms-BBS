@@ -49,6 +49,7 @@ classDiagram
         -ZooRepository zoo_repository
         -AnimalRepository animal_repository
         -EnclosureRepository enclosure_repository
+        -EmployeeRepository employee_repository
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
