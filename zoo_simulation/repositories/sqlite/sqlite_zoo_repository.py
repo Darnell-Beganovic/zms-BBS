@@ -56,22 +56,29 @@ class SQLZooRepository(ZooRepository):
         """
         self._connection = connection
 
-    def save(self, zoo: Zoo) -> None:
+    def save(self, zoo: Zoo) -> int:
         """Insert a new Zoo row.
 
         Args:
             zoo (Zoo): the Zoo instance to insert.
 
+        Returns:
+            int: the zoo_id assigned by SQLite (cursor.lastrowid). The
+            caller is responsible for making the id available on its own
+            Zoo reference (e.g. by constructing a new Zoo with this id, or
+            however the Backend focus's Zoo class exposes that) - this
+            method does not assume `zoo.id` is settable.
+
         Test:
             - Given a new, valid Zoo object, when save() is called, then
-              a new row is inserted and get_by_id() afterwards returns
-              matching data.
+              the returned id is a positive int and get_by_id(that id)
+              afterwards returns matching data.
             - Given a database connection failure (e.g. a locked file),
-              when save() is called, then the transaction is rolled back
-              and no partial row is written.
+              when save() is called, then the transaction is rolled back,
+              no partial row is written, and no id is returned.
         """
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO zoo (name, location, current_visitors, maximum_visitors)
                 VALUES (?, ?, ?, ?)
@@ -79,6 +86,7 @@ class SQLZooRepository(ZooRepository):
                 (zoo.name, zoo.location, zoo.current_visitors, zoo.maximum_visitors),
             )
             self._connection.commit()
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise

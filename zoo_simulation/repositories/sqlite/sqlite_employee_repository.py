@@ -70,7 +70,7 @@ class SQLEmployeeRepository(EmployeeRepository):
         """
         self._connection = connection
 
-    def save(self, employee: Employee, zoo_id: int) -> None:
+    def save(self, employee: Employee, zoo_id: int) -> int:
         """Insert a new Employee row.
 
         Args:
@@ -80,16 +80,24 @@ class SQLEmployeeRepository(EmployeeRepository):
                 `type(employee).__name__`, not a separate attribute.
             zoo_id (int): id of the Zoo the employee belongs to.
 
+        Returns:
+            int: the employee_id assigned by SQLite (cursor.lastrowid).
+            The caller is responsible for making the id available on its
+            own Employee reference - this method does not assume
+            `employee.id` is settable (Backend domain objects such as
+            Transaction expose `id` as a read-only property with no
+            setter, so Employee is expected to follow the same pattern).
+
         Test:
             - Given a new, valid Employee object and an existing zoo_id,
-              when save() is called, then a new row is inserted and
-              get_by_id() afterwards returns matching data.
+              when save() is called, then the returned id is a positive
+              int and get_by_id(that id) afterwards returns matching data.
             - Given a database connection failure (e.g. a locked file),
-              when save() is called, then the transaction is rolled back
-              and no partial row is written.
+              when save() is called, then the transaction is rolled back,
+              no partial row is written, and no id is returned.
         """
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO employee (zoo_id, employee_type, name, salary)
                 VALUES (?, ?, ?, ?)
@@ -97,6 +105,7 @@ class SQLEmployeeRepository(EmployeeRepository):
                 (zoo_id, type(employee).__name__, employee.name, employee.salary),
             )
             self._connection.commit()
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise

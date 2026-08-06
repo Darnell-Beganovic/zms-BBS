@@ -83,7 +83,7 @@ class SQLAnimalRepository(AnimalRepository):
         """
         self._connection = connection
 
-    def save(self, animal: Animal, enclosure_id: int | None = None) -> None:
+    def save(self, animal: Animal, enclosure_id: int | None = None) -> int:
         """Insert a new Animal row.
 
         Args:
@@ -93,17 +93,23 @@ class SQLAnimalRepository(AnimalRepository):
                 animal is assigned to, or None if not yet assigned.
                 Defaults to None.
 
+        Returns:
+            int: the animal_id assigned by SQLite (cursor.lastrowid). The
+            caller is responsible for making the id available on its own
+            Animal reference - this method does not assume `animal.id` is
+            settable.
+
         Test:
             - Given a new, valid Animal object and an existing
-              enclosure_id, when save() is called, then a new row is
-              inserted and get_by_id() afterwards returns matching data,
-              including the enclosure assignment.
+              enclosure_id, when save() is called, then the returned id is
+              a positive int and get_by_id(that id) afterwards returns
+              matching data, including the enclosure assignment.
             - Given a database connection failure (e.g. a locked file),
-              when save() is called, then the transaction is rolled back
-              and no partial row is written.
+              when save() is called, then the transaction is rolled back,
+              no partial row is written, and no id is returned.
         """
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO animal
                     (enclosure_id, name, species, food_preference, age, health, hunger, energy)
@@ -121,6 +127,7 @@ class SQLAnimalRepository(AnimalRepository):
                 ),
             )
             self._connection.commit()
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise

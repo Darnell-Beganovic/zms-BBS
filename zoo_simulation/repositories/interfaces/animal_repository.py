@@ -36,7 +36,7 @@ class AnimalRepository(ABC):
     """
 
     @abstractmethod
-    def save(self, animal: Animal, enclosure_id: int | None = None) -> None:
+    def save(self, animal: Animal, enclosure_id: int | None = None) -> int:
         """Persist a new Animal.
 
         Args:
@@ -50,14 +50,25 @@ class AnimalRepository(ABC):
                 Defaults to None (animal not yet assigned to an
                 enclosure).
 
+        Returns:
+            int: the animal_id assigned by the database (e.g. read back
+            via cursor.lastrowid after the INSERT). Implementations must
+            NOT assume the passed-in `animal` instance's `id` is settable
+            (Backend domain objects such as Transaction expose `id` as a
+            read-only property with no setter) - the caller is
+            responsible for making the returned id available on its own
+            reference.
+
         Test:
             - Any implementation, given a new, valid Animal object and an
-              existing enclosure_id, when save() is called, must make it
-              retrievable via get_by_id() afterwards with matching data
-              and the correct enclosure assignment.
+              existing enclosure_id, when save() is called, must return
+              the new animal_id, and that id must be retrievable via
+              get_by_id() afterwards with matching data and the correct
+              enclosure assignment.
             - Any implementation, given an underlying storage failure
               (e.g. a locked database file), when save() is called, must
-              not leave a partially written row behind.
+              not leave a partially written row behind and must not
+              return an id for a row that wasn't committed.
         """
         raise NotImplementedError
 
