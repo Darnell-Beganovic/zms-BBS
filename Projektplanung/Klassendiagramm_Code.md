@@ -281,12 +281,14 @@ classDiagram
     %% Animal itself carries no enclosure_id attribute (unidirectional
     %% aggregation Enclosure o-- Animal); this mirrors
     %% ZooService.add_animal(animal, enclosure_id) below.
+    %% update()'s enclosure_id is Optional: None means "leave the current
+    %% enclosure assignment unchanged", not "unassign".
     class AnimalRepository {
         <<interface>>
         +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal, enclosure_id: int) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
     }
@@ -365,7 +367,7 @@ classDiagram
         +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal, enclosure_id: int) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
         #row_to_animal(row: Row) Animal

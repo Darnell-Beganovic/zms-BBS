@@ -71,7 +71,7 @@ classDiagram
         +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal, enclosure_id: int) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
     }
@@ -127,7 +127,7 @@ classDiagram
         +save(animal: Animal, enclosure_id: int) void
         +get_by_id(animal_id: int) Animal
         +get_all() list
-        +update(animal: Animal, enclosure_id: int) void
+        +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
         #row_to_animal(row: Row) Animal
