@@ -37,7 +37,7 @@ classDiagram
     class ZooView {
         <<Flask blueprint>>
         +show_zoo_status(data: DataFrame) Response
-        +show_animals(data: DataFrame) Response
+        +show_animals(data: DataFrame, view: str) Response
         +show_financial_report(data: DataFrame) Response
         +show_message(message: str) Response
         +handle_feed_animal_form(request: Request) Response
@@ -118,6 +118,41 @@ Responsibility principle already stated in section 4.
 | `/simulation/step` | POST | Trigger one simulation tick | `ZooController.run_simulation_step()` |
 | `/reports/financial` | GET | Display / download financial report (CSV/Excel) | `ZooController.create_report(format)` |
 
+### 3.1 Animal Game View on `/animals` (agreed 2026-08-06)
+
+`/animals` gained a small, presentation-only `?view=` query parameter,
+following the exact same pattern already used by `format` on
+`/reports/financial` — it does not add a new route, does not change the
+`ZooController` call (still `show_status()`), and therefore does not touch
+the route table above:
+
+- `?view=` absent or `?view=game` (default): renders a 2D, game-style board
+  — enclosures drawn as distinct boxed "pens", each containing its animals
+  as emoji sprites (🦁🦒🐧) that wander within their pen's bounds via a
+  client-side JS animation loop. Clicking an animal opens a popup with its
+  stats (name/species/age/health/hunger/energy), a feed form (posts to the
+  existing `/animals/<id>/feed` route, normal page reload — no AJAX, no
+  response-format change), and greyed-out placeholder buttons for
+  animal-specific actions `ZooController` does not expose yet (e.g.
+  "Behandeln"/treat), clearly marked unavailable.
+- `?view=list`: renders the original plain HTML table (kept for
+  accessibility/testability, reachable via a small toggle link on the game
+  view).
+
+All rendering/animation logic is pure presentation, driven entirely by data
+already returned from `ZooController.show_status()` — no new backend calls.
+CSS/JS live in `zoo_simulation/frontend/static/{css,js}/`, served by
+Flask's default `/static` route (auto-registered by `Flask(__name__)`, no
+additional Python route needed).
+
+**Explicitly deferred:** purchasing enclosures ("Gehege kaufen") as a game
+mechanic. `Enclosure` has no `price` attribute in the domain model and
+`ZooController`/`ZooService` have no purchase method for enclosures (only
+`Zoo.add_enclosure()`, with no cost concept) — implementing this for real
+would require a Backend/Domain change (Darnell's focus), which is out of
+scope for the Frontend individual submission. Revisit once/if the domain
+model gains an `Enclosure.price` attribute.
+
 ## 4. OOP Principles Applied in the Frontend
 
 - **Abstraction**: The Frontend only knows the `ZooController` interface, not
@@ -169,6 +204,16 @@ below; they are **not** implemented as automated pytest code.
   with `format=csv`, then a downloadable CSV file is returned.
 - TC-F08: Given financial data exists, when the report route is requested
   with `format=xlsx`, then a downloadable Excel file is returned.
+
+### `show_animals(data, view)`
+
+- TC-F09: Given animals assigned to several enclosures, when the route is
+  requested without a `view` parameter (or `view=game`), then the 2D game
+  board is rendered with one boxed pen per enclosure and every animal
+  placed in its correct pen.
+- TC-F10: Given the same data, when the route is requested with
+  `view=list`, then the original plain HTML table is rendered instead,
+  with one row per animal — no game-board markup.
 
 ## 6. Open Questions / Assumptions
 
