@@ -30,10 +30,20 @@ weicht bewusst vom Klassendiagramm ab, das `show_message(message: str)
 Response` zeigt: Flask's idiomatisches Post/Redirect/Get-Muster erzeugt die
 tatsaechliche `Response` erst durch das nachfolgende `render_template()`/
 `redirect()` der jeweiligen Route, nicht durch `show_message()` selbst.
+
+Spielansicht (siehe `planning_frontend_alessio.md` Abschnitt 3.1): `/animals`
+rendert standardmaessig ein 2D-Spielbrett (`templates/animals_game.html`,
+Gehege als Boxen mit umherwandernden Tier-Sprites, Klick oeffnet ein Popup
+mit Fuetterungsformular) statt der urspruenglichen Tabelle
+(`templates/animals.html`, weiterhin ueber `?view=list` erreichbar). Das ist
+reine Praesentation ueber denselben `ZooController.show_status()`-Aufruf -
+CSS/JS liegen getrennt in `static/css/`/`static/js/`, ausgeliefert ueber
+Flasks automatische `/static`-Route (kein zusaetzlicher Python-Code noetig).
 """
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -161,64 +171,103 @@ def show_zoo_status(status_data: dict) -> str:
 
 @zoo_bp.route("/animals", methods=["GET"])
 def list_animals() -> str:
-    """Route `GET /animals`: listet alle Tiere mit Hunger/Health/Energy.
+    """Route `GET /animals`: zeigt die Tiere als 2D-Spielbrett oder Tabelle.
 
     Ruft wie `index()` `ZooController.show_status()` auf (siehe Routen-
     Tabelle in `planning_frontend_alessio.md` Abschnitt 3 - beide Routen
     zeigen nur einen anderen Ausschnitt desselben Status) und delegiert das
-    Rendering an `show_animals()`.
+    Rendering an `show_animals()`. Der optionale `view`-Query-Parameter
+    steuert dabei nur die Darstellung (siehe Abschnitt 3.1 der Planung),
+    genau wie `format` bei `/reports/financial` - kein neuer
+    `ZooController`-Aufruf, keine Aenderung an der Routen-Tabelle.
 
     Args:
-        (keine; Flask uebergibt keine URL-Parameter fuer `/animals`)
+        (keine expliziten; `view` wird aus `flask.request.args` gelesen)
 
     Returns:
         str: Gerenderter HTML-Inhalt (von Flask automatisch in eine
         `Response` mit Status 200 verpackt).
 
     Test:
-        TC-V07: Given `ZooController.show_status()` liefert `success=True`
-            mit einem nicht-leeren Animals-`DataFrame`, when GET `/animals`
-            aufgerufen wird, then antwortet die Route mit Status 200 und die
-            Tabelle zeigt eine Zeile pro Tier inkl. Hunger/Health/Energy.
+        TC-V07 (gilt fuer `?view=list`): Given `ZooController.show_status()`
+            liefert `success=True` mit einem nicht-leeren Animals-
+            `DataFrame`, when GET `/animals?view=list` aufgerufen wird, then
+            antwortet die Route mit Status 200 und die Tabelle zeigt eine
+            Zeile pro Tier inkl. Hunger/Health/Energy.
         TC-V08: Given `ZooController.show_status()` liefert `success=False`,
-            when GET `/animals` aufgerufen wird, then wird die Fehlermeldung
-            per `show_message()` geflasht und die Seite rendert eine leere
-            Tierliste statt eines 500-Fehlers.
+            when GET `/animals` (beliebige `view`) aufgerufen wird, then
+            wird die Fehlermeldung per `show_message()` geflasht und die
+            Seite rendert eine leere Tier-/Gehegeliste statt eines
+            500-Fehlers.
+        TC-V22: Given kein `view`-Parameter (oder `view=game`) wird
+            mitgeschickt, when GET `/animals` aufgerufen wird, then wird das
+            2D-Spielbrett (`animals_game.html`) gerendert, nicht die
+            Tabelle.
     """
+    view = "list" if request.args.get("view") == "list" else "game"
     result = _controller.show_status()
     if not result["success"]:
         show_message(result["message"], category="error")
-        return render_template("animals.html", animals=[])
-    return show_animals(result["data"])
+        if view == "list":
+            return render_template("animals.html", animals=[])
+        return render_template("animals_game.html", enclosures=[], animals_json="[]")
+    return show_animals(result["data"], view=view)
 
 
-def show_animals(status_data: dict) -> str:
-    """Rendert das Template mit der Tierliste (Hunger/Health/Energy je Tier).
+def show_animals(status_data: dict, view: str = "game") -> str:
+    """Rendert die Tieransicht - als Spielbrett (Standard) oder als Tabelle.
 
     Entspricht `ZooView.show_animals(data: DataFrame) Response` im
-    Klassendiagramm. Anders als `show_zoo_status()` braucht diese Funktion
-    nur den Animals-Teil von `status_data`, ignoriert `"zoo"`/`"enclosures"`.
+    Klassendiagramm. `view` ist ein reines Praesentationsdetail (siehe
+    `planning_frontend_alessio.md` Abschnitt 3.1) - unabhaengig vom Wert
+    wird immer derselbe `ZooController.show_status()`-Aufruf verwendet,
+    nur das Template unterscheidet sich.
 
     Args:
-        status_data (dict): Erwartet mindestens den Schluessel `"animals"`
-            (`pandas.DataFrame` mit Spalten u.a. `id`, `name`, `species`,
-            `hunger`, `health`, `energy`).
+        status_data (dict): Erwartet den Schluessel `"animals"`
+            (`pandas.DataFrame`, Spalten u.a. `id`, `name`, `species`,
+            `hunger`, `health`, `energy`, `enclosure_id`); bei
+            `view="game"` zusaetzlich `"enclosures"` (`pandas.DataFrame`),
+            da die Gehege dort als Boxen gezeichnet werden.
+        view (str): `"game"` (Standard) fuer das 2D-Spielbrett,
+            `"list"` fuer die urspruengliche HTML-Tabelle.
 
     Returns:
-        str: Gerenderter Inhalt von `templates/animals.html`.
+        str: Gerenderter Inhalt von `templates/animals_game.html`
+        (`view="game"`) bzw. `templates/animals.html` (`view="list"`).
 
     Test:
-        TC-V09 (analog TC-F03): Given ein nicht-leeres Animals-`DataFrame`,
-            when `show_animals(status_data)` aufgerufen wird, then rendert
-            das Template eine Zeile pro Tier mit Name, Spezies, Hunger,
-            Health und Energy.
-        TC-V10 (analog TC-F04): Given ein leeres Animals-`DataFrame` (noch
-            keine Tiere angelegt), when `show_animals(status_data)`
-            aufgerufen wird, then wird ein freundlicher "noch keine
-            Tiere"-Hinweis gezeigt statt einer leeren Tabelle.
+        TC-V09 (analog TC-F03, gilt fuer `view="list"`): Given ein
+            nicht-leeres Animals-`DataFrame`, when
+            `show_animals(status_data, view="list")` aufgerufen wird, then
+            rendert die Tabelle eine Zeile pro Tier mit Name, Spezies,
+            Hunger, Health und Energy.
+        TC-V10 (analog TC-F04, gilt fuer `view="list"`): Given ein leeres
+            Animals-`DataFrame`, when `show_animals(status_data,
+            view="list")` aufgerufen wird, then wird ein freundlicher
+            "noch keine Tiere"-Hinweis gezeigt statt einer leeren Tabelle.
+        TC-V20: Given `status_data` enthaelt Tiere, die auf 3 verschiedene
+            Gehege verteilt sind, when `show_animals(status_data)` (Standard
+            `view="game"`) aufgerufen wird, then rendert das Spielbrett
+            genau 3 Gehege-Boxen, und die eingebettete JSON-Nutzlast
+            (`animals_json`) enthaelt alle Tiere mit ihrer `enclosure_id`,
+            damit `game.js` sie der richtigen Box zuordnen kann.
+        TC-V21: Given dieselben Daten wie in TC-V20, when
+            `show_animals(status_data, view="list")` aufgerufen wird, then
+            wird stattdessen die urspruengliche Tabelle gerendert, ohne
+            Gehege-Boxen oder JSON-Nutzlast.
     """
     animals = status_data["animals"].to_dict(orient="records")
-    return render_template("animals.html", animals=animals)
+
+    if view == "list":
+        return render_template("animals.html", animals=animals)
+
+    enclosures = status_data["enclosures"].to_dict(orient="records")
+    return render_template(
+        "animals_game.html",
+        enclosures=enclosures,
+        animals_json=json.dumps(animals),
+    )
 
 
 @zoo_bp.route("/animals/<int:animal_id>/feed", methods=["POST"])

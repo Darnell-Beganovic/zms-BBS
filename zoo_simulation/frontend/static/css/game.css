@@ -1,0 +1,156 @@
+/*
+ * game.css - Styling fuer die 2D-Spielansicht von /animals (Gehege-Boxen,
+ * Tier-Sprites, Klick-Popup). Getrennt von base.css, da nur die
+ * Spielansicht (templates/animals_game.html) das braucht.
+ *
+ * Schwerpunkt: Frontend (Presentation Layer) - Alessio Bellamacina
+ */
+
+.zoo-board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.enclosure-pen {
+  position: relative;
+  width: 260px;
+  height: 180px;
+  border: 3px solid #6b4f2a;
+  border-radius: 0.75rem;
+  background-color: #cfe8c8;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #cfe8c8,
+    #cfe8c8 10px,
+    #bfe0b6 10px,
+    #bfe0b6 20px
+  );
+  overflow: hidden;
+}
+
+@media (prefers-color-scheme: dark) {
+  .enclosure-pen {
+    border-color: #8a6a3a;
+    background-color: #234023;
+    background-image: repeating-linear-gradient(
+      45deg,
+      #234023,
+      #234023 10px,
+      #1c351c 10px,
+      #1c351c 20px
+    );
+  }
+}
+
+.enclosure-label {
+  position: absolute;
+  top: 0.25rem;
+  left: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: bold;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0 0.3rem;
+  border-radius: 0.2rem;
+  z-index: 2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .enclosure-label {
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+  }
+}
+
+.animal-sprite {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  font-size: 2rem;
+  line-height: 1;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  transition: left 0.6s linear, top 0.6s linear;
+  z-index: 1;
+}
+
+.animal-sprite:hover,
+.animal-sprite:focus-visible {
+  transform: scale(1.2);
+}
+
+.animal-sprite-name {
+  display: block;
+  font-size: 0.6rem;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 0.2rem;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: dark) {
+  .animal-sprite-name {
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+  }
+}
+
+/* Popup / Modal */
+
+.animal-popup {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+
+.animal-popup.hidden {
+  display: none;
+}
+
+.animal-popup-content {
+  background: Canvas;
+  color: CanvasText;
+  border-radius: 0.5rem;
+  padding: 1.5rem;
+  min-width: 260px;
+  max-width: 90vw;
+  position: relative;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+}
+
+.animal-popup-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.6rem;
+  background: none;
+  border: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+}
+
+.animal-popup-stats {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 1rem;
+}
+
+.animal-popup-feed-form {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.animal-popup-feed-form input {
+  width: 6rem;
+}
+
+.animal-popup-placeholder-actions button {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

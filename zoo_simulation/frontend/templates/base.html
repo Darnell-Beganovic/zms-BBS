@@ -4,19 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Zoo Management System{% endblock %}</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, sans-serif; max-width: 60rem; margin: 2rem auto; padding: 0 1rem; }
-    header { display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; border-bottom: 1px solid #8888; padding-bottom: 0.5rem; margin-bottom: 1rem; }
-    nav a { margin-right: 1rem; }
-    table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
-    th, td { border: 1px solid #8888; padding: 0.4rem 0.6rem; text-align: left; }
-    ul.flash-messages { list-style: none; padding: 0; }
-    .flash { padding: 0.6rem 0.8rem; border-radius: 0.3rem; margin-bottom: 0.5rem; }
-    .flash-success { background: #1e7e34; color: #fff; }
-    .flash-error { background: #a83232; color: #fff; }
-    .flash-info { background: #3468a8; color: #fff; }
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+  {% block head %}{% endblock %}
 </head>
 <body>
   <header>
@@ -41,5 +30,7 @@
   <main>
     {% block content %}{% endblock %}
   </main>
+
+  {% block scripts %}{% endblock %}
 </body>
 </html>

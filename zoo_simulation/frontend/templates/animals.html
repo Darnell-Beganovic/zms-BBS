@@ -3,7 +3,10 @@
 {% block title %}Tiere – Zoo Management System{% endblock %}
 
 {% block content %}
-  <h2>Tiere</h2>
+  <div class="game-toolbar">
+    <h2>Tiere</h2>
+    <a href="{{ url_for('zoo.list_animals') }}">Spielansicht</a>
+  </div>
 
   {% if animals %}
     <table>
@@ -31,7 +34,7 @@
             <td>{{ animal.enclosure_id }}</td>
             <td>
               <form method="post" action="{{ url_for('zoo.handle_feed_animal_form', animal_id=animal.id) }}">
-                <input type="number" name="food_id" min="1" required placeholder="Futter-ID" style="width:6rem;">
+                <input type="number" name="food_id" min="1" required placeholder="Futter-ID" class="food-id-input">
                 <button type="submit">Füttern</button>
               </form>
             </td>
