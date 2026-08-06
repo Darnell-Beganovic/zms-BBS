@@ -34,21 +34,30 @@ The diagram below is the Backend-relevant subset of the full class diagram in
 classDiagram
     direction TB
 
+    %% NOTE (2026-08-06, agreed Frontend/Backend, see
+    %% planning_frontend_alessio.md sections 2.1/2.2): ZooController methods
+    %% return a uniform result dict {"success": bool, "message": str,
+    %% "data": Any} instead of void, so ZooView can render success/error
+    %% messages and the returned data without touching the service layer.
+    %% sell_ticket() was added to close a gap between the frontend route
+    %% table (/tickets/buy) and this diagram, which had no ticket method.
     class ZooController {
         -ZooService zoo_service
         -SimulationService simulation_service
         -ReportService report_service
-        +show_status() void
-        +add_animal(data: dict) void
-        +feed_animal(animal_id: int, food_id: int) void
-        +run_simulation_step() void
-        +create_report() void
+        +show_status() dict
+        +add_animal(data: dict) dict
+        +feed_animal(animal_id: int, food_id: int) dict
+        +sell_ticket(price: float) dict
+        +run_simulation_step() dict
+        +create_report(format: Optional[str]) dict
     }
 
     class ZooService {
         -ZooRepository zoo_repository
         -AnimalRepository animal_repository
         -EnclosureRepository enclosure_repository
+        -EmployeeRepository employee_repository
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
@@ -119,33 +128,57 @@ classDiagram
         +grow_older() void*
         +update() void
         +calculate_welfare() float
+        +adjust_health(delta: int) void
+        +adjust_hunger(delta: int) void
+        +adjust_energy(delta: int) void
         #validate_value(value: int) int
     }
 
     class Lion {
+        -str food_preference
         +eat(food: FoodItem) void
         +sleep() void
         +move() str
         +grow_older() void
+        +typical_behavior() str
     }
 
     class Giraffe {
+        -str food_preference
         +eat(food: FoodItem) void
         +sleep() void
         +move() str
         +grow_older() void
+        +typical_behavior() str
     }
 
     class Penguin {
+        -str food_preference
         +eat(food: FoodItem) void
         +sleep() void
         +move() str
         +grow_older() void
+        +typical_behavior() str
     }
 
     class Behavior {
         <<abstract>>
         +execute(animal: Animal) void*
+    }
+
+    class FeedingBehavior {
+        -str food_preference
+        +execute(animal: Animal) void
+    }
+
+    class SocialBehavior {
+        -int social_level
+        +execute(animal: Animal) void
+    }
+
+    class RestBehavior {
+        -int rest_duration
+        +execute(animal: Animal) void
     }
 
     class SimulationEngine {
@@ -174,6 +207,10 @@ classDiagram
     Animal <|-- Giraffe
     Animal <|-- Penguin
 
+    Behavior <|-- FeedingBehavior
+    Behavior <|-- SocialBehavior
+    Behavior <|-- RestBehavior
+
     Animal *-- "1..*" Behavior : composed of
 
     Zoo *-- "1..*" Enclosure : owns
@@ -185,6 +222,66 @@ classDiagram
     SimulationEngine --> Zoo : updates
     SimulationEngine --> EventScheduler : uses
 ```
+
+### 2.1 ZooController Result Contract (agreed 2026-08-06)
+
+`ZooController` methods return a uniform result dict instead of `void`:
+
+```python
+{"success": bool, "message": str, "data": Any}
+```
+
+- `success` tells the frontend whether to render a success or error state.
+- `message` is a human-readable string the frontend shows as-is (e.g. via a
+  flash message).
+- `data` carries whatever payload the caller needs (e.g. a DataFrame/dict
+  for `show_status()`, or `{"file_path": str, "mimetype": str}` for
+  `create_report()` when exporting to CSV/Excel).
+
+`sell_ticket(price: float)` was added because the frontend's `/tickets/buy`
+route needs a `ZooController` entry point (only `ZooService.sell_ticket()`
+existed before), and the Frontend focus never calls `ZooService` directly
+(see the layering rule in `planning.md` §7.1). `create_report()` takes a
+`format: Optional[str]` argument (`"csv"`, `"xlsx"`, or `None`/`"html"` for
+a plain in-page report); for `"csv"`/`"xlsx"` its `data` field must contain
+`{"file_path": str, "mimetype": str}` so the Flask route can stream the
+file back via `send_file()` without building the CSV/Excel content itself
+(that part is `ReportService`'s job, Database focus).
+
+See `planning_frontend_alessio.md` sections 2.1/2.2 for the full rationale
+agreed with Alessio, including why `ZooView`'s own methods keep the
+`Response` return type in the diagram despite Flask view functions
+returning plain `str` in the actual code.
+
+### 2.2 Behavior Composition & Animal Encapsulation (agreed 2026-08-06)
+
+`Behavior` (and its subclasses `FeedingBehavior`, `SocialBehavior`,
+`RestBehavior`, matching the full diagram in
+`../../Projektplanung/Klassendiagramm_Code.md`) was present in this
+document's diagram only as an abstract class before this addition - the
+concrete subclasses and their composition into `Animal` are functional,
+not just structural: `Animal.update()` iterates over its composed
+Behaviors and calls `execute(self)` on each once per simulation tick.
+Each Behavior affects exactly one stat in isolation (hunger, energy or
+health) - there is deliberately no blending or interaction between
+multiple Behaviors on the same Animal, to keep this composition simple
+per aufgabe.md's "Komposition" requirement in Teilbereich 2, without
+over-engineering emergent behavior.
+
+Since `Behavior.execute(animal)` is a separate class, not an `Animal`
+subclass, it cannot reach `Animal`'s private `_health`/`_hunger`/
+`_energy` attributes directly without breaking Kapselung. `Animal`
+therefore exposes three new public mutator methods -
+`adjust_health(delta)`, `adjust_hunger(delta)`, `adjust_energy(delta)` -
+that route every change through the existing `#validate_value()` clamp,
+so external Behavior objects can only ever move a stat within its valid
+0-100 range, never set it directly or push it out of range. These three
+methods are additions to the class diagram versus the original
+"Beispiel (abwandelbar)" sketch in `aufgabe.md`; `Lion`/`Giraffe`/
+`Penguin`'s `-food_preference` attribute and `+typical_behavior()`
+method were likewise adopted from the full diagram (aufgabe.md
+Teilbereich 2 explicitly names "Nahrungspräferenzen" and
+"typischesVerhalten()").
 
 ## 3. OOP Principles Applied in the Backend
 
@@ -262,3 +359,10 @@ below; they are **not** implemented as automated pytest code.
   service layer (Darnell) is: Flask validates input *shape* (e.g. required
   fields present, correct type), the service layer validates *domain rules*
   (e.g. hunger cannot go below 0).
+- As of 2026-08-06, the Frontend (Alessio) has already implemented
+  `zoo_view.py` against the result-dict `ZooController` contract in
+  section 2.1, using `zoo_simulation/frontend/controller_stub.py`
+  (`MockZooController`) as a stand-in. When implementing the real
+  `ZooController`, match that contract exactly (return dict, not void;
+  include `sell_ticket()`; `create_report(format)`), otherwise the
+  frontend's routes will break on integration.

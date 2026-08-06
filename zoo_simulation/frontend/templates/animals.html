@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+
+{% block title %}Tiere – Zoo Management System{% endblock %}
+
+{% block content %}
+  <div class="game-toolbar">
+    <h2>Tiere</h2>
+    <a href="{{ url_for('zoo.list_animals') }}">Spielansicht</a>
+  </div>
+
+  {% if animals %}
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Spezies</th>
+          <th>Alter</th>
+          <th>Health</th>
+          <th>Hunger</th>
+          <th>Energy</th>
+          <th>Gehege</th>
+          <th>Füttern</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for animal in animals %}
+          <tr>
+            <td>{{ animal.name }}</td>
+            <td>{{ animal.species }}</td>
+            <td>{{ animal.age }}</td>
+            <td>{{ animal.health }}</td>
+            <td>{{ animal.hunger }}</td>
+            <td>{{ animal.energy }}</td>
+            <td>{{ animal.enclosure_id }}</td>
+            <td>
+              <form method="post" action="{{ url_for('zoo.handle_feed_animal_form', animal_id=animal.id) }}">
+                <input type="number" name="food_id" min="1" required placeholder="Futter-ID" class="food-id-input">
+                <button type="submit">Füttern</button>
+              </form>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Es sind noch keine Tiere vorhanden.</p>
+  {% endif %}
+{% endblock %}

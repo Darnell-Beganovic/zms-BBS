@@ -37,7 +37,7 @@ classDiagram
     class ZooView {
         <<Flask blueprint>>
         +show_zoo_status(data: DataFrame) Response
-        +show_animals(data: DataFrame) Response
+        +show_animals(data: DataFrame, view: str) Response
         +show_financial_report(data: DataFrame) Response
         +show_message(message: str) Response
         +handle_feed_animal_form(request: Request) Response
@@ -48,15 +48,64 @@ classDiagram
         -ZooService zoo_service
         -SimulationService simulation_service
         -ReportService report_service
-        +show_status() void
-        +add_animal(data: dict) void
-        +feed_animal(animal_id: int, food_id: int) void
-        +run_simulation_step() void
-        +create_report() void
+        +show_status() dict
+        +add_animal(data: dict) dict
+        +feed_animal(animal_id: int, food_id: int) dict
+        +sell_ticket(price: float) dict
+        +run_simulation_step() dict
+        +create_report(format: str) dict
     }
 
     ZooView --> ZooController : user actions (HTTP requests)
 ```
+
+### 2.1 ZooController Result Contract (agreed 2026-08-06)
+
+The class diagram in `planning.md`/`Klassendiagramm_Code.md` originally showed
+every `ZooController` method returning `void`. In practice the Frontend needs
+both the requested data and a success/error signal, so all `ZooController`
+methods return a uniform result dict instead:
+
+```python
+{"success": bool, "message": str, "data": Any}
+```
+
+- `success` drives whether the view renders a success or error flash message.
+- `message` is a human-readable string shown to the user as-is.
+- `data` carries the payload the route needs to render (e.g. a DataFrame /
+  dict for `show_status()`, or file info for `create_report()`).
+
+`ZooController.sell_ticket(price: float)` was added to close a gap between
+this route table and the class diagram, which had no ticket-related method
+(only `ZooService.sell_ticket()` existed). `create_report()` now takes a
+`format: str` argument (`"csv"`, `"xlsx"`, or `None`/`"html"` for the plain
+report view) and its `data` field carries `{"file_path": str, "mimetype":
+str}` so the Flask route can stream the file back with `send_file()` without
+building CSV/Excel content itself.
+
+### 2.2 Implementation Note: `Response` Return Type (agreed 2026-08-06)
+
+The class diagram types every `ZooView` rendering/handling method (
+`show_zoo_status`, `show_animals`, `show_financial_report`, `show_message`,
+`handle_feed_animal_form`, `handle_buy_ticket_form`) as returning `Response`.
+In the actual Flask code these functions are implemented with a Python
+return type of `str` (the string produced by `render_template()`), not an
+explicit `flask.Response` object. This is intentional and does not
+contradict the diagram: Flask automatically wraps a `str` returned from a
+view function into a full `Response` object (status 200, headers, etc.)
+before it reaches the client, which is idiomatic Flask and avoids
+unnecessary boilerplate (`make_response(render_template(...))`) on every
+route. The diagram's `Response` return type describes the HTTP-level
+outcome the client receives, not the literal Python return type of the
+implementing function.
+
+Flask route functions that only dispatch to a `ZooController` call and then
+delegate rendering (e.g. the `/`-route function that calls
+`ZooController.show_status()` and hands the result to `show_zoo_status()`)
+are pure routing/error-handling glue and are intentionally not listed as
+separate `ZooView` methods in the class diagram — only the methods that do
+meaningful rendering/handling work are modelled there, per the Single
+Responsibility principle already stated in section 4.
 
 ## 3. Page / Route Overview
 
@@ -64,10 +113,45 @@ classDiagram
 |-------|--------|---------|------------------|
 | `/` | GET | Show zoo dashboard (visitors, enclosures) | `ZooController.show_status()` |
 | `/animals` | GET | List all animals with state (hunger, health, energy) | `ZooController.show_status()` |
-| `/animals/<id>/feed` | POST | Submit feeding form | `ZooController.feed_animal()` |
-| `/tickets/buy` | POST | Submit ticket purchase form | `ZooController` (sells ticket via `ZooService`) |
+| `/animals/<id>/feed` | POST | Submit feeding form | `ZooController.feed_animal(animal_id, food_id)` |
+| `/tickets/buy` | POST | Submit ticket purchase form | `ZooController.sell_ticket(price)` |
 | `/simulation/step` | POST | Trigger one simulation tick | `ZooController.run_simulation_step()` |
-| `/reports/financial` | GET | Display / download financial report (CSV/Excel) | `ZooController.create_report()` |
+| `/reports/financial` | GET | Display / download financial report (CSV/Excel) | `ZooController.create_report(format)` |
+
+### 3.1 Animal Game View on `/animals` (agreed 2026-08-06)
+
+`/animals` gained a small, presentation-only `?view=` query parameter,
+following the exact same pattern already used by `format` on
+`/reports/financial` — it does not add a new route, does not change the
+`ZooController` call (still `show_status()`), and therefore does not touch
+the route table above:
+
+- `?view=` absent or `?view=game` (default): renders a 2D, game-style board
+  — enclosures drawn as distinct boxed "pens", each containing its animals
+  as emoji sprites (🦁🦒🐧) that wander within their pen's bounds via a
+  client-side JS animation loop. Clicking an animal opens a popup with its
+  stats (name/species/age/health/hunger/energy), a feed form (posts to the
+  existing `/animals/<id>/feed` route, normal page reload — no AJAX, no
+  response-format change), and greyed-out placeholder buttons for
+  animal-specific actions `ZooController` does not expose yet (e.g.
+  "Behandeln"/treat), clearly marked unavailable.
+- `?view=list`: renders the original plain HTML table (kept for
+  accessibility/testability, reachable via a small toggle link on the game
+  view).
+
+All rendering/animation logic is pure presentation, driven entirely by data
+already returned from `ZooController.show_status()` — no new backend calls.
+CSS/JS live in `zoo_simulation/frontend/static/{css,js}/`, served by
+Flask's default `/static` route (auto-registered by `Flask(__name__)`, no
+additional Python route needed).
+
+**Explicitly deferred:** purchasing enclosures ("Gehege kaufen") as a game
+mechanic. `Enclosure` has no `price` attribute in the domain model and
+`ZooController`/`ZooService` have no purchase method for enclosures (only
+`Zoo.add_enclosure()`, with no cost concept) — implementing this for real
+would require a Backend/Domain change (Darnell's focus), which is out of
+scope for the Frontend individual submission. Revisit once/if the domain
+model gains an `Enclosure.price` attribute.
 
 ## 4. OOP Principles Applied in the Frontend
 
@@ -121,8 +205,30 @@ below; they are **not** implemented as automated pytest code.
 - TC-F08: Given financial data exists, when the report route is requested
   with `format=xlsx`, then a downloadable Excel file is returned.
 
+### `show_animals(data, view)`
+
+- TC-F09: Given animals assigned to several enclosures, when the route is
+  requested without a `view` parameter (or `view=game`), then the 2D game
+  board is rendered with one boxed pen per enclosure and every animal
+  placed in its correct pen.
+- TC-F10: Given the same data, when the route is requested with
+  `view=list`, then the original plain HTML table is rendered instead,
+  with one row per animal — no game-board markup.
+
 ## 6. Open Questions / Assumptions
 
 - User authentication and role-based access are explicitly out of scope for
   this project (see `planning.md` section 4.2); all routes are
   unauthenticated by design, not as a temporary simplification.
+- As of 2026-08-06, `ZooController` (Backend focus, Darnell) is not yet
+  implemented (`controller/zoo_controller.py` is an empty file). The Frontend
+  is built against `zoo_simulation/frontend/controller_stub.py`, a
+  `MockZooController` that implements the exact result-dict contract from
+  section 2.1 with in-memory fake data. `zoo_view.py` imports it from a
+  single place so it can be swapped for the real `ZooController` import once
+  it lands, without changing any route logic.
+- The result-dict contract in section 2.1 (`{"success", "message", "data"}`)
+  and the added `sell_ticket(price)` / `create_report(format)` signatures
+  were agreed between Frontend and Backend on 2026-08-06 and should be
+  reflected in `planning_backend_darnell.md`'s `ZooController` diagram once
+  Darnell implements the real controller.
