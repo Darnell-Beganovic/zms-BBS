@@ -59,7 +59,7 @@ class SQLEnclosureRepository(EnclosureRepository):
         """
         self._connection = connection
 
-    def save(self, enclosure: Enclosure, zoo_id: int) -> None:
+    def save(self, enclosure: Enclosure, zoo_id: int) -> int:
         """Insert a new Enclosure row.
 
         Args:
@@ -69,16 +69,22 @@ class SQLEnclosureRepository(EnclosureRepository):
                 is supplied separately, mirroring how AnimalRepository
                 takes enclosure_id separately.
 
+        Returns:
+            int: the enclosure_id assigned by SQLite (cursor.lastrowid).
+            The caller is responsible for making the id available on its
+            own Enclosure reference - this method does not assume
+            `enclosure.id` is settable.
+
         Test:
             - Given a new, valid Enclosure object and an existing zoo_id,
-              when save() is called, then a new row is inserted and
-              get_by_id() afterwards returns matching data.
+              when save() is called, then the returned id is a positive
+              int and get_by_id(that id) afterwards returns matching data.
             - Given a database connection failure (e.g. a locked file),
-              when save() is called, then the transaction is rolled back
-              and no partial row is written.
+              when save() is called, then the transaction is rolled back,
+              no partial row is written, and no id is returned.
         """
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO enclosure
                     (zoo_id, name, enclosure_type, size, capacity, cleanliness, temperature)
@@ -95,6 +101,7 @@ class SQLEnclosureRepository(EnclosureRepository):
                 ),
             )
             self._connection.commit()
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise

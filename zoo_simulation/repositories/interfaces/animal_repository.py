@@ -53,9 +53,11 @@ class AnimalRepository(ABC):
         Returns:
             int: the animal_id assigned by the database (e.g. read back
             via cursor.lastrowid after the INSERT). Implementations must
-            also set this id on the passed-in `animal` instance before
-            returning, so the caller's reference is immediately usable
-            for get_by_id()/update() without a re-fetch.
+            NOT assume the passed-in `animal` instance's `id` is settable
+            (Backend domain objects such as Transaction expose `id` as a
+            read-only property with no setter) - the caller is
+            responsible for making the returned id available on its own
+            reference.
 
         Test:
             - Any implementation, given a new, valid Animal object and an
@@ -63,9 +65,6 @@ class AnimalRepository(ABC):
               the new animal_id, and that id must be retrievable via
               get_by_id() afterwards with matching data and the correct
               enclosure assignment.
-            - Any implementation, given a new, valid Animal object, when
-              save() is called, must also set animal.id to the returned
-              value.
             - Any implementation, given an underlying storage failure
               (e.g. a locked database file), when save() is called, must
               not leave a partially written row behind and must not
