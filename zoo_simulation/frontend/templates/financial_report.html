@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block title %}Finanzbericht – Zoo Management System{% endblock %}
+
+{% block content %}
+  <h2>Finanzbericht</h2>
+  <p>Bilanz: {{ "%.2f"|format(balance) }} €</p>
+
+  <p>
+    <a href="{{ url_for('zoo.financial_report', format='csv') }}">Als CSV herunterladen</a>
+    &nbsp;|&nbsp;
+    <a href="{{ url_for('zoo.financial_report', format='xlsx') }}">Als Excel herunterladen</a>
+  </p>
+
+  {% if transactions %}
+    <table>
+      <thead>
+        <tr>
+          <th>Typ</th>
+          <th>Betrag</th>
+          <th>Beschreibung</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for transaction in transactions %}
+          <tr>
+            <td>{{ transaction.transaction_type }}</td>
+            <td>{{ "%.2f"|format(transaction.amount) }} €</td>
+            <td>{{ transaction.description }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Es sind noch keine Transaktionen vorhanden.</p>
+  {% endif %}
+{% endblock %}
