@@ -90,12 +90,23 @@ class MockZooController:
                 manuell getestet werden kann).
         """
         self._animals: list[dict[str, Any]] = [
+            # Absichtlich mehrere Tiere pro Spezies (z.B. 3 Loewen), damit die
+            # Spielansicht (siehe game.js) mehrere Sprites pro Gehege zeigen
+            # kann, statt genau ein Exemplar je Art.
             {"id": 1, "name": "Leo", "species": "Lion", "age": 4,
              "health": 90, "hunger": 40, "energy": 70, "enclosure_id": 1},
-            {"id": 2, "name": "Gina", "species": "Giraffe", "age": 6,
+            {"id": 2, "name": "Simba", "species": "Lion", "age": 3,
+             "health": 85, "hunger": 60, "energy": 75, "enclosure_id": 1},
+            {"id": 3, "name": "Nala", "species": "Lion", "age": 5,
+             "health": 95, "hunger": 25, "energy": 65, "enclosure_id": 1},
+            {"id": 4, "name": "Gina", "species": "Giraffe", "age": 6,
              "health": 95, "hunger": 20, "energy": 85, "enclosure_id": 2},
-            {"id": 3, "name": "Pingu", "species": "Penguin", "age": 2,
+            {"id": 5, "name": "Melman", "species": "Giraffe", "age": 8,
+             "health": 80, "hunger": 45, "energy": 55, "enclosure_id": 2},
+            {"id": 6, "name": "Pingu", "species": "Penguin", "age": 2,
              "health": 100, "hunger": 55, "energy": 60, "enclosure_id": 3},
+            {"id": 7, "name": "Skipper", "species": "Penguin", "age": 3,
+             "health": 90, "hunger": 35, "energy": 90, "enclosure_id": 3},
         ]
         self._enclosures: list[dict[str, Any]] = [
             {"id": 1, "name": "Savannah", "enclosure_type": "Savanna",
@@ -136,8 +147,9 @@ class MockZooController:
         Test:
             TC-M05: Given der Stub wurde mit den Standard-Beispieldaten
                 initialisiert, when `show_status()` aufgerufen wird, then
-                enthaelt `data["animals"]` genau 3 Zeilen und `data["zoo"]
-                ["current_visitors"]` entspricht dem zuletzt bekannten Stand.
+                enthaelt `data["animals"]` genau 7 Zeilen (u.a. 3 Loewen) und
+                `data["zoo"]["current_visitors"]` entspricht dem zuletzt
+                bekannten Stand.
             TC-M06: Given `sell_ticket()` wurde zuvor erfolgreich aufgerufen,
                 when `show_status()` danach aufgerufen wird, then ist
                 `data["zoo"]["current_visitors"]` um die Anzahl der
