@@ -70,7 +70,7 @@ class SQLEmployeeRepository(EmployeeRepository):
         """
         self._connection = connection
 
-    def save(self, employee: Employee, zoo_id: int) -> None:
+    def save(self, employee: Employee, zoo_id: int) -> int:
         """Insert a new Employee row.
 
         Args:
@@ -80,16 +80,23 @@ class SQLEmployeeRepository(EmployeeRepository):
                 `type(employee).__name__`, not a separate attribute.
             zoo_id (int): id of the Zoo the employee belongs to.
 
+        Returns:
+            int: the employee_id assigned by SQLite (cursor.lastrowid).
+            `employee.id` is set to this value before returning, so the
+            caller's reference is immediately usable for get_by_id()/
+            update() without a re-fetch.
+
         Test:
             - Given a new, valid Employee object and an existing zoo_id,
-              when save() is called, then a new row is inserted and
-              get_by_id() afterwards returns matching data.
+              when save() is called, then a new row is inserted, the
+              returned id (and employee.id) match, and get_by_id()
+              afterwards returns matching data.
             - Given a database connection failure (e.g. a locked file),
-              when save() is called, then the transaction is rolled back
-              and no partial row is written.
+              when save() is called, then the transaction is rolled back,
+              no partial row is written, and no id is returned.
         """
         try:
-            self._connection.execute(
+            cursor = self._connection.execute(
                 """
                 INSERT INTO employee (zoo_id, employee_type, name, salary)
                 VALUES (?, ?, ?, ?)
@@ -97,6 +104,8 @@ class SQLEmployeeRepository(EmployeeRepository):
                 (zoo_id, type(employee).__name__, employee.name, employee.salary),
             )
             self._connection.commit()
+            employee.id = cursor.lastrowid
+            return cursor.lastrowid
         except Exception:
             self._connection.rollback()
             raise
