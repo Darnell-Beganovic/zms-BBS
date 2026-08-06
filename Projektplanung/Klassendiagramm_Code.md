@@ -411,6 +411,7 @@ classDiagram
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
+        #row_to_transaction(row: Row) Transaction
     }
 
     %% =========================
