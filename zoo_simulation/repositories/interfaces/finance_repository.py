@@ -37,16 +37,29 @@ class FinanceRepository(ABC):
     """
 
     @abstractmethod
-    def save_transaction(self, transaction: Transaction) -> None:
+    def save_transaction(self, transaction: Transaction, zoo_id: int) -> int:
         """Persist a new Transaction.
 
         Args:
             transaction (Transaction): the Transaction instance to insert
                 (e.g. a ticket sale income or a feed cost expense).
+            zoo_id (int): id of the Zoo the transaction belongs to.
+                Transaction carries no zoo_id attribute (see the class
+                diagram), so it is supplied separately, mirroring
+                AnimalRepository/EnclosureRepository/EmployeeRepository.
+
+        Returns:
+            int: the transaction_id assigned by the database (e.g. read
+            back via cursor.lastrowid after the INSERT). Implementations
+            must NOT assume the passed-in `transaction` instance's `id` is
+            settable (Transaction exposes `id` as a read-only property
+            with no setter) - the caller is responsible for making the
+            returned id available on its own reference.
 
         Test:
             - Any implementation, given a new, valid Transaction, when
-              save_transaction() is called, must make it appear in
+              save_transaction() is called, must return the new
+              transaction_id, and it must appear in
               get_all_transactions() afterwards with matching data.
             - Any implementation, given a Transaction with a negative
               amount representing an expense, when save_transaction() is

@@ -402,6 +402,15 @@ classDiagram
         #row_to_employee(row: Row) Employee
     }
 
+    class SQLEmployeeRepository {
+        -DatabaseConnection connection
+        +save(employee: Employee) void
+        +get_by_id(employee_id: int) Employee
+        +get_all() list
+        +update(employee: Employee) void
+        +delete(employee_id: int) void
+    }
+
     class SQLInventoryRepository {
         -DatabaseConnection connection
         +save_item(item: FoodItem) void
