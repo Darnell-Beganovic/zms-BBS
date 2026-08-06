@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Zoo Management System{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('zoo.static', filename='css/base.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <h1>🦁 Zoo Management System</h1>
+    <nav>
+      <a href="{{ url_for('zoo.index') }}">Dashboard</a>
+      <a href="{{ url_for('zoo.list_animals') }}">Tiere</a>
+      <a href="{{ url_for('zoo.financial_report') }}">Finanzbericht</a>
+    </nav>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <ul class="flash-messages">
+        {% for category, message in messages %}
+          <li class="flash flash-{{ category }}">{{ message }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+  {% endwith %}
+
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard – Zoo Management System{% endblock %}
+
+{% block content %}
+  <h2>{{ zoo.get("name", "Zoo") }}{% if zoo.get("location") %} ({{ zoo.location }}){% endif %}</h2>
+  <p>Besucher: {{ zoo.get("current_visitors", 0) }} / {{ zoo.get("maximum_visitors", 0) }}</p>
+
+  <h3>Ticket kaufen</h3>
+  <form method="post" action="{{ url_for('zoo.handle_buy_ticket_form') }}">
+    <input type="number" name="price" min="0" step="0.01" required placeholder="Preis in €" class="price-input">
+    <button type="submit">Ticket kaufen</button>
+  </form>
+
+  <h3>Simulation</h3>
+  <form method="post" action="{{ url_for('zoo.handle_simulation_step') }}">
+    <button type="submit">Simulationsschritt ausführen</button>
+  </form>
+
+  <h3>Gehege</h3>
+  {% if enclosures %}
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Typ</th>
+          <th>Kapazität</th>
+          <th>Sauberkeit</th>
+          <th>Temperatur</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for enclosure in enclosures %}
+          <tr>
+            <td>{{ enclosure.name }}</td>
+            <td>{{ enclosure.enclosure_type }}</td>
+            <td>{{ enclosure.capacity }}</td>
+            <td>{{ "%.0f"|format(enclosure.cleanliness * 100) }}%</td>
+            <td>{{ enclosure.temperature }} °C</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>Es sind noch keine Gehege angelegt.</p>
+  {% endif %}
+{% endblock %}
