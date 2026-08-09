@@ -16,6 +16,18 @@
     version: 1.0.0
     license: Educational Use - Programming II Module
 
+    Fixed 2026-08-09: `_row_to_animal()` previously called the Animal
+    subclass constructors without `behaviors`, a required positional
+    argument (`Animal *-- "1..*" Behavior`, see Klassendiagramm_Code.md) -
+    every `get_by_id()`/`get_all()` call raised `TypeError` immediately.
+    `Behavior` objects are not persisted anywhere (no `behavior` table in
+    schema.sql - they carry no id/state worth round-tripping, see
+    domain/behaviors/*.py), so there is nothing to load back; instead,
+    reconstructed animals are given a fixed default Behavior set built from
+    the stored `food_preference` (see `_default_behaviors()`). This
+    satisfies the 1..* composition constraint but is a deliberate,
+    documented approximation, not a restoration of whatever Behaviors the
+    animal had before saving - see planning_db_kaiss.md section 6.
 """
 
 from __future__ import annotations
@@ -26,11 +38,22 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from zoo_simulation.domain.behaviors.feeding_behavior import FeedingBehavior
+from zoo_simulation.domain.behaviors.rest_behavior import RestBehavior
+from zoo_simulation.domain.behaviors.social_behavior import SocialBehavior
 from zoo_simulation.repositories.interfaces.animal_repository import AnimalRepository
 
 if TYPE_CHECKING:
     from zoo_simulation.database.database_connection import DatabaseConnection
     from zoo_simulation.domain.animals.animal import Animal
+    from zoo_simulation.domain.behaviors.behavior import Behavior
+
+# Vorbelegung fuer neu geladene Tiere - siehe Modul-Docstring ("Fixed
+# 2026-08-09"): moderates Fressverhalten, Ruheverhalten und ein neutrales
+# Sozialverhalten, unabhaengig von Spezies. Werte bewusst schlicht gehalten
+# (kein Anspruch, den exakten Zustand vor dem letzten Speichern zu treffen).
+_DEFAULT_REST_DURATION = 20
+_DEFAULT_SOCIAL_LEVEL = 50
 
 _ANIMAL_COLUMNS = (
     "animal_id",
@@ -269,6 +292,42 @@ class SQLAnimalRepository(AnimalRepository):
             return pd.DataFrame(columns=_ANIMAL_COLUMNS)
         return pd.DataFrame([dict(row) for row in rows], columns=list(_ANIMAL_COLUMNS))
 
+    def _default_behaviors(self, food_preference: str | None) -> list[Behavior]:
+        """Build the default Behavior set assigned to every reconstructed Animal.
+
+        See the module docstring ("Fixed 2026-08-09") for why this exists:
+        Behavior objects are not persisted, so there is nothing to load -
+        this fabricates a fixed, reasonable set instead, satisfying
+        `Animal`'s `1..*` Behavior composition requirement.
+
+        Args:
+            food_preference (str | None): the animal's stored
+                `food_preference` column value, passed straight into the
+                `FeedingBehavior` (falls back to `""` if `NULL`, matching
+                `FeedingBehavior.__init__()`'s own lack of validation for
+                an empty preference).
+
+        Returns:
+            list[Behavior]: `[FeedingBehavior(food_preference),
+            RestBehavior(_DEFAULT_REST_DURATION),
+            SocialBehavior(_DEFAULT_SOCIAL_LEVEL)]` - always non-empty.
+
+        Test:
+            - Given food_preference="meat", when
+              `_default_behaviors("meat")` is called, then the returned
+              list has length 3 and its `FeedingBehavior` entry has
+              `.food_preference == "meat"`.
+            - Given food_preference=None (NULL column), when
+              `_default_behaviors(None)` is called, then no exception is
+              raised and the `FeedingBehavior` entry's `.food_preference`
+              is `""`.
+        """
+        return [
+            FeedingBehavior(food_preference or ""),
+            RestBehavior(_DEFAULT_REST_DURATION),
+            SocialBehavior(_DEFAULT_SOCIAL_LEVEL),
+        ]
+
     def _row_to_animal(self, row: sqlite3.Row) -> Animal:
         """Build the correct concrete Animal subclass from one `animal` row.
 
@@ -278,16 +337,23 @@ class SQLAnimalRepository(AnimalRepository):
 
         Returns:
             Animal: a Lion/Giraffe/Penguin instance populated from the
-            row, chosen via the `species` discriminator column.
+            row, chosen via the `species` discriminator column, with a
+            default Behavior set (see `_default_behaviors()`).
 
         Test:
             - Given a row with species="Giraffe", when _row_to_animal()
               is called, then a Giraffe instance is returned with
-              attributes equal to the row's values.
+              attributes equal to the row's values and a non-empty
+              `.behaviors` list (constructor would otherwise raise
+              ValueError per Animal's 1..* composition requirement).
             - Given a row with a species value not present in
               _SPECIES_TO_CLASS (e.g. corrupted data), when
               _row_to_animal() is called, then a ValueError is raised
               instead of silently returning a wrong/generic object.
+            - Given a row where age/health/hunger/energy are NULL
+              (schema.sql allows it - no NOT NULL constraint), when
+              _row_to_animal() is called, then Animal's own constructor
+              defaults are used instead of raising TypeError.
         """
         species = row["species"]
         if species not in _SPECIES_TO_CLASS:
@@ -296,12 +362,14 @@ class SQLAnimalRepository(AnimalRepository):
         module_path, class_name = _SPECIES_TO_CLASS[species]
         animal_class = getattr(importlib.import_module(module_path), class_name)
 
-        return animal_class(
-            id=row["animal_id"],
-            name=row["name"],
-            food_preference=row["food_preference"],
-            age=row["age"],
-            health=row["health"],
-            hunger=row["hunger"],
-            energy=row["energy"],
-        )
+        kwargs = {
+            "id": row["animal_id"],
+            "name": row["name"],
+            "food_preference": row["food_preference"],
+            "behaviors": self._default_behaviors(row["food_preference"]),
+        }
+        for stat in ("age", "health", "hunger", "energy"):
+            if row[stat] is not None:
+                kwargs[stat] = row[stat]
+
+        return animal_class(**kwargs)

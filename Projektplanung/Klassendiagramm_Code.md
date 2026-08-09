@@ -283,7 +283,7 @@ classDiagram
 
     class ZooRepository {
         <<interface>>
-        +save(zoo: Zoo) void
+        +save(zoo: Zoo) int
         +get_by_id(zoo_id: int) Zoo
         +update(zoo: Zoo) void
     }
@@ -296,7 +296,7 @@ classDiagram
     %% enclosure assignment unchanged", not "unassign".
     class AnimalRepository {
         <<interface>>
-        +save(animal: Animal, enclosure_id: int) void
+        +save(animal: Animal, enclosure_id: int) int
         +get_by_id(animal_id: int) Animal
         +get_all() list
         +update(animal: Animal, enclosure_id: Optional[int]) void
@@ -306,7 +306,7 @@ classDiagram
 
     class EnclosureRepository {
         <<interface>>
-        +save(enclosure: Enclosure, zoo_id: int) void
+        +save(enclosure: Enclosure, zoo_id: int) int
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
@@ -314,29 +314,34 @@ classDiagram
 
     class EmployeeRepository {
         <<interface>>
-        +save(employee: Employee, zoo_id: int) void
+        +save(employee: Employee, zoo_id: int) int
         +get_by_id(employee_id: int) Employee
         +get_all() list
         +update(employee: Employee) void
         +delete(employee_id: int) void
     }
 
+    %% get_inventory() added 2026-08-09: reconstructs the full Inventory
+    %% aggregate (not just individual items) - needed so ZooRepository can
+    %% build a complete Zoo (Zoo *-- "1" Inventory), see
+    %% planning_db_kaiss.md section 2.1/6.
     class InventoryRepository {
         <<interface>>
-        +save_item(item: FoodItem) void
+        +save_item(item: FoodItem, inventory_id: int) int
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
-        +save_medication(medication: Medication) void
+        +save_medication(medication: Medication, inventory_id: int) int
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
+        +get_inventory(zoo_id: int) Inventory
     }
 
     class FinanceRepository {
         <<interface>>
-        +save_transaction(transaction: Transaction) void
+        +save_transaction(transaction: Transaction, zoo_id: int) int
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
@@ -365,37 +370,59 @@ classDiagram
         #require_connection() Connection
     }
 
+    %% SQLZooRepository composes the three sibling repositories below
+    %% (added 2026-08-09) so row_to_zoo() can build a *complete* Zoo -
+    %% Enclosures/Inventory/FinanceManager are all required constructor
+    %% arguments (Zoo *-- Enclosure/Inventory/FinanceManager) but none are
+    %% columns on the zoo table itself. See planning_db_kaiss.md section
+    %% 2.1/6 for the full rationale, including the single-zoo scoping
+    %% assumption this relies on.
     class SQLZooRepository {
         -DatabaseConnection connection
-        +save(zoo: Zoo) void
+        -EnclosureRepository enclosure_repository
+        -InventoryRepository inventory_repository
+        -FinanceRepository finance_repository
+        +save(zoo: Zoo) int
         +get_by_id(zoo_id: int) Zoo
         +update(zoo: Zoo) void
         #row_to_zoo(row: Row) Zoo
     }
 
+    %% default_behaviors() added 2026-08-09: Behavior is not persisted (no
+    %% table, see database/schema.sql's header comment), so
+    %% row_to_animal() assigns every reconstructed Animal a fixed default
+    %% Behavior set instead of leaving the required Animal(behaviors=...)
+    %% argument unfilled. See planning_db_kaiss.md section 2.1/6.
     class SQLAnimalRepository {
         -DatabaseConnection connection
-        +save(animal: Animal, enclosure_id: int) void
+        +save(animal: Animal, enclosure_id: int) int
         +get_by_id(animal_id: int) Animal
         +get_all() list
         +update(animal: Animal, enclosure_id: Optional[int]) void
         +delete(animal_id: int) void
         +get_as_dataframe() DataFrame
         #row_to_animal(row: Row) Animal
+        #default_behaviors(food_preference: str) list
     }
 
     class SQLEnclosureRepository {
         -DatabaseConnection connection
-        +save(enclosure: Enclosure, zoo_id: int) void
+        +save(enclosure: Enclosure, zoo_id: int) int
         +get_by_id(enclosure_id: int) Enclosure
         +get_all() list
         +update(enclosure: Enclosure) void
         #row_to_enclosure(row: Row) Enclosure
     }
 
+    %% finance_repository added 2026-08-09: Administrator requires a
+    %% FinanceManager (constructor-injected, see planning_backend_darnell.md
+    %% section 2.3) that no column on the employee table can supply -
+    %% row_to_employee() builds one from FinanceRepository.get_balance()
+    %% for Administrator rows only. See planning_db_kaiss.md section 2.1/6.
     class SQLEmployeeRepository {
         -DatabaseConnection connection
-        +save(employee: Employee, zoo_id: int) void
+        -FinanceRepository finance_repository
+        +save(employee: Employee, zoo_id: int) int
         +get_by_id(employee_id: int) Employee
         +get_all() list
         +update(employee: Employee) void
@@ -403,31 +430,23 @@ classDiagram
         #row_to_employee(row: Row) Employee
     }
 
-    class SQLEmployeeRepository {
-        -DatabaseConnection connection
-        +save(employee: Employee) void
-        +get_by_id(employee_id: int) Employee
-        +get_all() list
-        +update(employee: Employee) void
-        +delete(employee_id: int) void
-    }
-
     class SQLInventoryRepository {
         -DatabaseConnection connection
-        +save_item(item: FoodItem) void
+        +save_item(item: FoodItem, inventory_id: int) int
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
-        +save_medication(medication: Medication) void
+        +save_medication(medication: Medication, inventory_id: int) int
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
+        +get_inventory(zoo_id: int) Inventory
     }
 
     class SQLFinanceRepository {
         -DatabaseConnection connection
-        +save_transaction(transaction: Transaction) void
+        +save_transaction(transaction: Transaction, zoo_id: int) int
         +get_all_transactions() list
         +get_balance() float
         +get_as_dataframe() DataFrame
@@ -522,4 +541,13 @@ classDiagram
     SQLEmployeeRepository --> DatabaseConnection
     SQLInventoryRepository --> DatabaseConnection
     SQLFinanceRepository --> DatabaseConnection
+
+    %% Added 2026-08-09 (see planning_db_kaiss.md section 2.1/6):
+    %% SQLZooRepository composes its sibling repositories to reconstruct a
+    %% full Zoo aggregate; SQLEmployeeRepository needs FinanceRepository
+    %% to build an Administrator's FinanceManager.
+    SQLZooRepository --> EnclosureRepository : loads Enclosures
+    SQLZooRepository --> InventoryRepository : loads Inventory
+    SQLZooRepository --> FinanceRepository : loads balance
+    SQLEmployeeRepository --> FinanceRepository : builds Administrator's FinanceManager
 ```

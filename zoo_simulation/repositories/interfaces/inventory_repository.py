@@ -16,6 +16,13 @@
     version: 1.0.0
     license: Educational Use - Programming II Module
 
+    Added 2026-08-09: `get_inventory(zoo_id)` reconstructs the actual
+    `Inventory` aggregate (not just its items) - needed so
+    `ZooRepository` can build a complete `Zoo` object (`Zoo *-- "1"
+    Inventory`), which its constructor requires. Previously this
+    interface only exposed FoodItem/Medication item access, with no way
+    to obtain an `Inventory` instance itself; see
+    planning_db_kaiss.md section 6 for the full rationale.
 """
 
 from __future__ import annotations
@@ -27,6 +34,7 @@ import pandas as pd
 
 if TYPE_CHECKING:
     from zoo_simulation.domain.food_item import FoodItem
+    from zoo_simulation.domain.inventory import Inventory
     from zoo_simulation.domain.medication import Medication
 
 
@@ -237,5 +245,35 @@ class InventoryRepository(ABC):
               get_as_dataframe() is called, must return an empty
               DataFrame with the correct columns (not None), so
               ReportService can still export a valid empty report.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_inventory(self, zoo_id: int) -> Inventory | None:
+        """Reconstruct the full Inventory aggregate (with all its items) for a zoo.
+
+        Added 2026-08-09 (see module docstring) so `ZooRepository` can
+        build a complete `Zoo` object - `Inventory` is a required
+        constructor argument (`Zoo *-- "1" Inventory`), and this was the
+        only way to obtain a populated `Inventory` instance rather than
+        just its individual FoodItem/Medication rows.
+
+        Args:
+            zoo_id (int): id of the Zoo whose Inventory should be loaded
+                (the `inventory` table has a unique `zoo_id` column, so
+                there is exactly zero or one Inventory per zoo).
+
+        Returns:
+            Inventory | None: an `Inventory` instance with every stored
+            FoodItem/Medication already added via `add_item()`, or `None`
+            if this zoo has no `inventory` row yet.
+
+        Test:
+            - Given a zoo whose inventory has 2 food items and 1
+              medication, when `get_inventory(zoo_id)` is called, then the
+              returned `Inventory.items` has length 3.
+            - Given a `zoo_id` with no matching `inventory` row, when
+              `get_inventory(zoo_id)` is called, then `None` is returned
+              instead of raising an unhandled exception.
         """
         raise NotImplementedError

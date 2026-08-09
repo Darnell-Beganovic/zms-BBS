@@ -17,6 +17,12 @@
     version: 1.0.0
     license: Educational Use - Programming II Module
 
+    Added 2026-08-09: `get_inventory(zoo_id)` reconstructs the full
+    `Inventory` aggregate (not just individual items), needed so
+    `SQLZooRepository` can build a complete `Zoo` object - see
+    `InventoryRepository.get_inventory()`'s docstring and
+    planning_db_kaiss.md section 6.
+
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
+from zoo_simulation.domain.inventory import Inventory
 from zoo_simulation.repositories.interfaces.inventory_repository import InventoryRepository
 
 if TYPE_CHECKING:
@@ -95,6 +102,11 @@ class SQLInventoryRepository(InventoryRepository):
             - Given a database connection failure (e.g. a locked file),
               when save_item() is called, then the transaction is rolled
               back, no partial row is written, and no id is returned.
+            - Given a FoodItem with a negative quantity/price_per_unit/
+              minimum_quantity (violating schema.sql's CHECK
+              constraints), when save_item() is called, then a
+              ValueError is raised instead of an unhandled
+              sqlite3.IntegrityError.
         """
         try:
             cursor = self._connection.execute(
@@ -114,6 +126,9 @@ class SQLInventoryRepository(InventoryRepository):
             )
             self._connection.commit()
             return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid FoodItem data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise
@@ -188,6 +203,9 @@ class SQLInventoryRepository(InventoryRepository):
                 ),
             )
             self._connection.commit()
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid FoodItem data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise
@@ -216,6 +234,11 @@ class SQLInventoryRepository(InventoryRepository):
               when save_medication() is called, then the transaction is
               rolled back, no partial row is written, and no id is
               returned.
+            - Given a Medication with a negative quantity/
+              minimum_quantity (violating schema.sql's CHECK
+              constraints), when save_medication() is called, then a
+              ValueError is raised instead of an unhandled
+              sqlite3.IntegrityError.
         """
         try:
             cursor = self._connection.execute(
@@ -227,6 +250,9 @@ class SQLInventoryRepository(InventoryRepository):
             )
             self._connection.commit()
             return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid Medication data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise
@@ -292,6 +318,9 @@ class SQLInventoryRepository(InventoryRepository):
                 (medication.name, medication.quantity, medication.minimum_quantity, medication.id),
             )
             self._connection.commit()
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid Medication data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise
@@ -347,6 +376,53 @@ class SQLInventoryRepository(InventoryRepository):
         if not records:
             return pd.DataFrame(columns=list(_COMBINED_COLUMNS))
         return pd.DataFrame(records, columns=list(_COMBINED_COLUMNS))
+
+    def get_inventory(self, zoo_id: int) -> Inventory | None:
+        """Reconstruct the full Inventory aggregate (with all its items) for a zoo.
+
+        Added 2026-08-09, see module docstring. Looks up the `inventory`
+        row for `zoo_id` (unique per zoo per schema.sql), then loads every
+        FoodItem/Medication scoped to that specific `inventory_id` (not a
+        blanket "all rows in the table" query, so this stays correct even
+        if the app ever manages more than one zoo/inventory).
+
+        Args:
+            zoo_id (int): id of the Zoo whose Inventory should be loaded.
+
+        Returns:
+            Inventory | None: populated `Inventory` instance, or `None` if
+            `zoo_id` has no `inventory` row.
+
+        Test:
+            - Given a zoo whose inventory has 2 food items and 1
+              medication, when `get_inventory(zoo_id)` is called, then the
+              returned `Inventory.items` has length 3.
+            - Given a `zoo_id` with no matching `inventory` row, when
+              `get_inventory(zoo_id)` is called, then `None` is returned
+              instead of raising an unhandled exception.
+        """
+        inventory_row = self._connection.execute(
+            "SELECT inventory_id FROM inventory WHERE zoo_id = ?", (zoo_id,)
+        ).fetchone()
+        if inventory_row is None:
+            return None
+
+        inventory_id = inventory_row["inventory_id"]
+        inventory = Inventory(id=inventory_id)
+
+        food_rows = self._connection.execute(
+            "SELECT * FROM food_item WHERE inventory_id = ?", (inventory_id,)
+        ).fetchall()
+        for row in food_rows:
+            inventory.add_item(self._row_to_food_item(row))
+
+        medication_rows = self._connection.execute(
+            "SELECT * FROM medication WHERE inventory_id = ?", (inventory_id,)
+        ).fetchall()
+        for row in medication_rows:
+            inventory.add_item(self._row_to_medication(row))
+
+        return inventory
 
     def _row_to_food_item(self, row: sqlite3.Row) -> FoodItem:
         """Build a FoodItem domain object from one `food_item` table row.
