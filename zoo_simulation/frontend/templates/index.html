@@ -2,6 +2,12 @@
   HUD-Leiste (Tag/Kontostand/Level/Sammlung/Attraktivitaet) und
   Dev-Tools-Panel (Reset-Knopf) ergaenzt mit Unterstuetzung von Kaiss Saleh
   (Datenbank-Schwerpunkt), Zoo-Spiel-Feature-Ausbau (2026-08-09).
+
+  Mitarbeiter-Panel (Liste + Einstellen-Formular) und "Reinigen"-Knopf je
+  Gehege ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+  Schwerpunkt), verdrahtet ZooController.hire_employee()/clean_enclosure()
+  erstmals (2026-08-09) - beide Methoden existierten vorher nicht auf dem
+  Controller, siehe planning_backend_darnell.md Abschnitt 2.9.
 #}
 {% extends "base.html" %}
 
@@ -38,6 +44,7 @@
             <th>Kapazität</th>
             <th>Sauberkeit</th>
             <th>Temperatur</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -48,6 +55,11 @@
               <td>{{ enclosure.capacity }}</td>
               <td>{{ "%.0f"|format(enclosure.cleanliness * 100) }}%</td>
               <td>{{ enclosure.temperature }} °C</td>
+              <td>
+                <form method="post" action="{{ url_for('zoo.handle_clean_enclosure_form', enclosure_id=enclosure.id) }}">
+                  <button type="submit">🧹 Reinigen</button>
+                </form>
+              </td>
             </tr>
           {% endfor %}
         </tbody>
@@ -55,6 +67,42 @@
     {% else %}
       <p>Es sind noch keine Gehege angelegt.</p>
     {% endif %}
+  </div>
+
+  <div class="panel">
+    <h3>👷 Mitarbeiter</h3>
+    {% if employees %}
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Rolle</th>
+            <th>Gehalt</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for employee in employees %}
+            <tr>
+              <td>{{ employee.name }}</td>
+              <td>{{ employee.role }}</td>
+              <td>{{ "%.2f"|format(employee.salary) }} €</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>Es sind noch keine Mitarbeiter eingestellt.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('zoo.handle_hire_employee_form') }}" class="hire-employee-form">
+      <input type="text" name="name" required maxlength="50" placeholder="Name">
+      <select name="role" required>
+        {% for role in known_roles %}
+          <option value="{{ role }}">{{ role }}</option>
+        {% endfor %}
+      </select>
+      <input type="number" name="salary" min="0" step="0.01" placeholder="Gehalt (monatlich)" class="price-input">
+      <button type="submit">Einstellen</button>
+    </form>
   </div>
 
   {#

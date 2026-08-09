@@ -61,6 +61,11 @@ local_settings.py
 db.sqlite3
 db.sqlite3-journal
 
+# ZMS runtime SQLite database (self-seeded by ZooController on first
+# run, see zoo_simulation/controller/zoo_controller.py) - generated
+# data, not source.
+zoo_simulation/database/*.db
+
 # Flask stuff:
 instance/
 .webassets-cache

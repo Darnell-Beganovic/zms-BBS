@@ -77,6 +77,16 @@ jetzt zusaetzlich `food_catalog` (aus `status_data`, siehe
 Fuetterungsformulare eine Futterauswahl mit Preis zeigen statt einer
 kontextlosen Zahl - `feed_animal()` selbst bucht die Kosten, diese Datei
 reicht nur die Anzeige-Daten durch.
+
+Vierte Ausbaustufe (2026-08-09, Mitarbeiter/Reinigung, mit Unterstuetzung
+von Alessio Bellamacina, Frontend-Schwerpunkt): neue Routen
+`POST /employees/hire` und `POST /enclosures/<id>/clean` verdrahten
+erstmals `ZooController.hire_employee(data)`/`clean_enclosure(enclosure_id)`
+- beide Methoden existierten vorher nicht auf dem Controller (siehe
+`planning_backend_darnell.md` Abschnitt 2.9). `index()`/`show_zoo_status()`
+reichen zusaetzlich `employees`/`known_roles` an `index.html` durch, das
+jetzt ein Mitarbeiter-Panel (Liste + Einstellen-Formular) sowie einen
+"Reinigen"-Knopf je Gehege zeigt.
 """
 
 from __future__ import annotations
@@ -96,7 +106,7 @@ if __package__ in (None, ""):
 
 from flask import Blueprint, flash, redirect, render_template, request, send_file, url_for
 
-from zoo_simulation.frontend.controller_stub import MockZooController as ZooController
+from zoo_simulation.controller.zoo_controller import ZooController
 
 zoo_bp = Blueprint(
     "zoo",
@@ -115,6 +125,13 @@ _VALID_REPORT_FORMATS = (None, "html", "csv", "xlsx")
 # Single Source of Truth zusammen mit SPECIES_EMOJI in static/js/game.js;
 # spiegelt die Lion/Giraffe/Penguin-Unterklassen aus dem Klassendiagramm.
 _KNOWN_SPECIES = ("Lion", "Giraffe", "Penguin")
+
+# Bekannte Mitarbeiterrollen fuer das "Mitarbeiter einstellen"-Formular
+# (Dashboard) - ergaenzt mit Unterstuetzung von Alessio Bellamacina
+# (Frontend-Schwerpunkt), siehe Modul-Docstring. Spiegelt Zookeeper/
+# Veterinarian/Administrator aus dem Klassendiagramm, analog zu
+# _KNOWN_SPECIES oben.
+_KNOWN_ROLES = ("Zookeeper", "Veterinarian", "Administrator")
 
 # Ein Controller pro Prozess, wiederverwendet ueber alle Requests hinweg -
 # noetig, damit der In-Memory-Zustand des Stubs (siehe controller_stub.py)
@@ -187,6 +204,8 @@ def index() -> str:
             "index.html",
             zoo={},
             enclosures=[],
+            employees=[],
+            known_roles=_KNOWN_ROLES,
             simulation_time=0,
             balance=0.0,
             animals_json="[]",
@@ -241,6 +260,8 @@ def show_zoo_status(status_data: dict) -> str:
         "index.html",
         zoo=status_data["zoo"],
         enclosures=enclosures,
+        employees=status_data.get("employees", []),
+        known_roles=_KNOWN_ROLES,
         simulation_time=status_data.get("simulation_time", 0),
         balance=status_data.get("balance", 0.0),
         animals_json=json.dumps(animals),
@@ -600,6 +621,111 @@ def handle_buy_ticket_form():
         return index(), 400
 
     result = _controller.sell_ticket(price)
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.index"))
+
+
+@zoo_bp.route("/employees/hire", methods=["POST"])
+def handle_hire_employee_form():
+    """Route `POST /employees/hire`: verarbeitet das "Mitarbeiter einstellen"-Formular.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09: verdrahtet erstmals
+    `ZooController.hire_employee(data)`, das vorher auf keiner Route lag
+    (siehe `planning_backend_darnell.md` Abschnitt 2.9 - die Methode
+    existierte vorher schlicht nicht auf dem Controller). Formular liegt
+    im "Mitarbeiter"-Panel auf dem Dashboard (`templates/index.html`).
+
+    Nur oberflaechliche Validierung (Pflichtfelder, Typen), analog zu
+    `handle_add_animal_form()`: `name` darf nicht leer sein, `role` muss
+    einer der bekannten Werte aus `_KNOWN_ROLES` sein, `salary` ist
+    optional, muss aber, falls angegeben, eine Zahl sein. Ob die Rolle
+    tatsaechlich unterstuetzt wird, entscheidet `ZooController.hire_employee()`
+    selbst.
+
+    Args:
+        (keine expliziten; `name`/`role`/`salary` werden aus
+        `flask.request.form` gelesen)
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger Eingabe ein
+        gerendertes Dashboard mit Status 400, ohne dass
+        `ZooController.hire_employee()` aufgerufen wird. Bei gueltiger
+        Eingabe ein Redirect (Status 302) zurueck auf `/` nach dem
+        Post/Redirect/Get-Muster, mit der Erfolgs-/Fehlermeldung von
+        `ZooController.hire_employee()` als Flash-Message.
+
+    Test:
+        TC-V34: Given ein POST-Request mit gueltigem `name`, `role` (aus
+            `_KNOWN_ROLES`) und optional `salary`, when das Formular
+            abgeschickt wird, then wird `ZooController.hire_employee()`
+            mit den geparsten Werten aufgerufen und der neue Mitarbeiter
+            erscheint nach dem Redirect im Mitarbeiter-Panel.
+        TC-V35: Given ein POST-Request mit leerem `name` oder einer
+            unbekannten `role`, when das Formular abgeschickt wird, then
+            wird der Request mit Status 400 abgelehnt und
+            `ZooController.hire_employee()` nicht aufgerufen.
+    """
+    name = request.form.get("name", "").strip()
+    role = request.form.get("role", "").strip()
+    salary_raw = request.form.get("salary", "").strip()
+
+    if not name or role not in _KNOWN_ROLES:
+        show_message(
+            "Bitte einen Namen und eine bekannte Rolle angeben.",
+            category="error",
+        )
+        return index(), 400
+
+    if salary_raw:
+        try:
+            salary = float(salary_raw)
+        except ValueError:
+            show_message("Gehalt muss eine Zahl sein.", category="error")
+            return index(), 400
+    else:
+        salary = 0.0
+
+    result = _controller.hire_employee({"name": name, "role": role, "salary": salary})
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.index"))
+
+
+@zoo_bp.route("/enclosures/<int:enclosure_id>/clean", methods=["POST"])
+def handle_clean_enclosure_form(enclosure_id: int):
+    """Route `POST /enclosures/<id>/clean`: reinigt ein Gehege.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09: verdrahtet erstmals
+    `ZooController.clean_enclosure(enclosure_id)`, das vorher auf keiner
+    Route lag (siehe `planning_backend_darnell.md` Abschnitt 2.9).
+    Reine Aktions-Route ohne Formularfelder - der "Reinigen"-Knopf liegt
+    direkt in der Gehege-Tabelle auf dem Dashboard
+    (`templates/index.html`).
+
+    Args:
+        enclosure_id (int): ID des zu reinigenden Geheges, aus der URL
+            (von Flask's `<int:...>`-Konverter bereits auf Typ int
+            geprueft - nicht-numerische IDs fuehren zu 404, bevor diese
+            Funktion ueberhaupt aufgerufen wird).
+
+    Returns:
+        Response: Redirect (Status 302) zurueck auf `/`, mit der
+        Erfolgs-/Fehlermeldung von `ZooController.clean_enclosure()` als
+        Flash-Message.
+
+    Test:
+        TC-V36: Given eine existierende `enclosure_id`, when
+            `POST /enclosures/<id>/clean` abgeschickt wird, then wird
+            `ZooController.clean_enclosure()` mit dieser ID aufgerufen
+            und die Sauberkeit ist nach dem Redirect auf dem Maximum.
+        TC-V37: Given eine nicht existierende `enclosure_id`, when die
+            Route aufgerufen wird, then zeigt
+            `ZooController.clean_enclosure()` eine Fehlermeldung, und die
+            Route leitet trotzdem (mit dieser Fehlermeldung) zurueck zum
+            Dashboard.
+    """
+    result = _controller.clean_enclosure(enclosure_id)
     show_message(result["message"], category="success" if result["success"] else "error")
     return redirect(url_for("zoo.index"))
 
