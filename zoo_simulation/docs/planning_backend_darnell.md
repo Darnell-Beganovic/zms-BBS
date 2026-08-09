@@ -596,6 +596,10 @@ Found by using the running app:
   parallel to the existing `food_catalog`) so the frontend can offer a
   medication choice; the bootstrap seed now also stocks two starter
   Medications, since there was previously none to treat with at all.
+  The frontend half (with Alessio Bellamacina, Frontend-Schwerpunkt):
+  `zoo_view.py` gained `POST /animals/<id>/treat`, and
+  `animals_game.html`/`game.js` now enable the "Behandeln" button with a
+  medication `<select>`, mirroring the existing feeding form.
 
 ## 3. OOP Principles Applied in the Backend
 
