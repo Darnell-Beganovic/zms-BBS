@@ -31,6 +31,30 @@ ebenfalls DataFrames liefert, siehe `AnimalRepository.get_as_dataframe()` im
 Klassendiagramm) und werden bei jedem Prozessneustart zurueckgesetzt. Es
 findet keine Persistenz statt - das ist bewusst so, da Datenbankanbindung
 nicht zum Frontend-Schwerpunkt gehoert.
+
+Ergaenzt mit Unterstuetzung von Kaiss Saleh (Datenbank-Schwerpunkt) im Rahmen
+des Zoo-Spiel-Feature-Ausbaus (2026-08-09): `show_status()` liefert jetzt
+zusaetzlich `simulation_time`/`balance` fuer die HUD-Leiste, `add_animal()`
+prueft jetzt Gehege-Existenz/-Kapazitaet, analog zu `Enclosure.has_capacity()`
+im echten Domain-Modell. Der Methodenvertrag selbst (Namen/Signaturen) bleibt
+unveraendert.
+
+`reset()` (siehe unten) ist eine bewusste Ausnahme: KEIN Teil der
+ZooController-Schnittstelle, existiert nur auf diesem Stub als Dev-/Demo-
+Werkzeug (verdrahtet ueber die ebenfalls stub-only Route `POST /dev/reset`
+in `zoo_view.py`). Der echte ZooController persistiert ueber SQLite -
+"zuruecksetzen" bedeutet dort `schema.sql` neu einspielen, nicht ein
+Flask-Request; diese Methode wird beim Tausch auf den echten Controller
+absichtlich nicht mehr existieren.
+
+Zweite Ausbaustufe (2026-08-09, Tycoon-Wirtschaft): `feed_animal()` bucht
+jetzt eine Ausgabe-Transaktion je Fuetterung (Vorzeichen-Konvention wie
+`Transaction.is_valid()` im Domain-Modell: negativ = expense), Preise kommen
+aus `_FOOD_CATALOG` - einem einfachen Stand-in fuer `FoodItem.price_per_unit`
+im echten Domain-Modell (siehe `domain/food_item.py`), da der Stub keine
+echte `Inventory` fuehrt. `show_status()` liefert `_FOOD_CATALOG` zusaetzlich
+als `food_catalog`, damit die Fuetterungsformulare eine Dropdown-Auswahl mit
+Preisen zeigen koennen statt einer kontextlosen Zahl.
 """
 
 from __future__ import annotations
@@ -40,6 +64,18 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
+
+# Einfacher Stand-in fuer FoodItem-Datensaetze (siehe domain/food_item.py),
+# da dieser Stub keine echte Inventory fuehrt - genug, um Fuetterungskosten
+# im Spiel spuerbar zu machen. `food_id` in feed_animal() referenziert diese
+# IDs; unbekannte IDs fallen auf _DEFAULT_FOOD_PRICE zurueck statt den
+# Aufruf abzulehnen (Fuetterung bleibt moeglich, auch mit "fremder" ID).
+_FOOD_CATALOG: tuple[dict[str, Any], ...] = (
+    {"id": 1, "name": "Heu", "price_per_unit": 3.0},
+    {"id": 2, "name": "Fleisch", "price_per_unit": 8.0},
+    {"id": 3, "name": "Fisch", "price_per_unit": 5.0},
+)
+_DEFAULT_FOOD_PRICE = 4.0
 
 
 class MockZooController:
@@ -140,7 +176,15 @@ class MockZooController:
 
         Returns:
             dict: `{"success": True, "message": str, "data": {"zoo": dict,
-            "animals": pandas.DataFrame, "enclosures": pandas.DataFrame}}`.
+            "animals": pandas.DataFrame, "enclosures": pandas.DataFrame,
+            "simulation_time": int, "balance": float, "food_catalog":
+            list[dict]}}`. `simulation_time`/`balance` wurden ergaenzt,
+            damit die Frontend-HUD-Leiste (Tag-Zaehler, Kontostand) nicht
+            extra `create_report()` aufrufen muss - beide Werte spiegeln nur
+            bereits vorhandenen Stub-Zustand wider (`_simulation_time`,
+            Summe von `_transactions`), keine neue Datenquelle.
+            `food_catalog` ist `_FOOD_CATALOG` (siehe Modul-Docstring), damit
+            die Fuetterungsformulare Futterauswahl+Preis anzeigen koennen.
             `show_status()` schlaegt in diesem Stub nie fehl, `success` ist
             daher immer `True`.
 
@@ -155,9 +199,21 @@ class MockZooController:
                 `data["zoo"]["current_visitors"]` um die Anzahl der
                 erfolgreichen Ticketverkaeufe erhoeht (Status spiegelt
                 vorherige Aenderungen wider).
+            TC-M18: Given `run_simulation_step()` wurde zuvor zweimal
+                aufgerufen, when `show_status()` danach aufgerufen wird,
+                then ist `data["simulation_time"]` gleich 2.
+            TC-M19: Given keine Transaktionen wurden veraendert, when
+                `show_status()` aufgerufen wird, then entspricht
+                `data["balance"]` der Summe aller `_transactions`-Betraege.
+            TC-M24: Given der Stub wurde initialisiert, when
+                `show_status()` aufgerufen wird, then enthaelt
+                `data["food_catalog"]` genau die 3 Eintraege aus
+                `_FOOD_CATALOG`, jeweils mit `id`/`name`/`price_per_unit`.
         """
         animals_df = pd.DataFrame(self._animals)
         enclosures_df = pd.DataFrame(self._enclosures)
+        transactions_df = pd.DataFrame(self._transactions)
+        balance = transactions_df["amount"].sum() if not transactions_df.empty else 0.0
         return {
             "success": True,
             "message": "Zoo status loaded.",
@@ -165,15 +221,21 @@ class MockZooController:
                 "zoo": dict(self._zoo),
                 "animals": animals_df,
                 "enclosures": enclosures_df,
+                "simulation_time": self._simulation_time,
+                "balance": balance,
+                "food_catalog": list(_FOOD_CATALOG),
             },
         }
 
     def add_animal(self, data: dict[str, Any]) -> dict[str, Any]:
-        """Legt ein neues Tier im Fake-Bestand an (Interface-Vollstaendigkeit).
+        """Legt ein neues Tier im Fake-Bestand an.
 
-        Aktuell von keiner der in `planning_frontend_alessio.md` Abschnitt 3
-        gelisteten Routen verwendet; die Methode existiert hier nur, weil sie
-        Teil der `ZooController`-Schnittstelle laut Klassendiagramm ist.
+        War urspruenglich von keiner Route benutzt (nur Interface-
+        Vollstaendigkeit); wird jetzt vom "Tier adoptieren"-Feature der
+        Spielansicht ueber `POST /animals/add` aufgerufen (siehe
+        `zoo_view.py`, `handle_add_animal_form()`) - der Methodenvertrag
+        selbst war bereits Teil der `ZooController`-Schnittstelle laut
+        Klassendiagramm und wird hier nur erstmals verdrahtet.
 
         Args:
             data (dict): Erwartet mindestens die Schluessel `name` (str),
@@ -181,18 +243,30 @@ class MockZooController:
 
         Returns:
             dict: `{"success": bool, "message": str, "data": dict | None}`.
-            `success` ist `False`, wenn ein Pflichtfeld fehlt; `data`
-            enthaelt in diesem Fall `None`.
+            `success` ist `False`, wenn ein Pflichtfeld fehlt, das Gehege
+            nicht existiert oder keine freie Kapazitaet mehr hat (spiegelt
+            `Enclosure.has_capacity()`/`add_animal()` im echten
+            Domain-Modell, das bei voller Kapazitaet einen ValueError
+            wirft); `data` enthaelt in diesem Fall `None`.
 
         Test:
-            TC-M07: Given `data` enthaelt `name`, `species` und
-                `enclosure_id`, when `add_animal(data)` aufgerufen wird, then
-                ist `success` `True` und das neue Tier erscheint danach in
+            TC-M07: Given `data` enthaelt `name`, `species` und die
+                `enclosure_id` eines Geheges mit freier Kapazitaet, when
+                `add_animal(data)` aufgerufen wird, then ist `success`
+                `True` und das neue Tier erscheint danach in
                 `show_status()["data"]["animals"]`.
             TC-M08: Given `data` fehlt der Schluessel `species`, when
                 `add_animal(data)` aufgerufen wird, then ist `success`
                 `False`, die Nachricht nennt das fehlende Feld, und der
                 Tierbestand bleibt unveraendert.
+            TC-M20: Given `enclosure_id` verweist auf ein Gehege, das
+                bereits an seiner `capacity` ist, when `add_animal(data)`
+                aufgerufen wird, then ist `success` `False`, die Nachricht
+                nennt die volle Kapazitaet, und der Tierbestand bleibt
+                unveraendert.
+            TC-M21: Given `enclosure_id` verweist auf kein existierendes
+                Gehege, when `add_animal(data)` aufgerufen wird, then ist
+                `success` `False` und der Tierbestand bleibt unveraendert.
         """
         required_fields = ("name", "species", "enclosure_id")
         missing = [field for field in required_fields if field not in data]
@@ -200,6 +274,24 @@ class MockZooController:
             return {
                 "success": False,
                 "message": f"Missing required field(s): {', '.join(missing)}.",
+                "data": None,
+            }
+
+        enclosure_id = data["enclosure_id"]
+        enclosure = next((e for e in self._enclosures if e["id"] == enclosure_id), None)
+        if enclosure is None:
+            return {
+                "success": False,
+                "message": f"Enclosure with id {enclosure_id} not found.",
+                "data": None,
+            }
+
+        occupied = sum(1 for a in self._animals if a["enclosure_id"] == enclosure_id)
+        if occupied >= enclosure["capacity"]:
+            return {
+                "success": False,
+                "message": f"Enclosure '{enclosure['name']}' is at full capacity "
+                f"({enclosure['capacity']}).",
                 "data": None,
             }
 
@@ -212,7 +304,7 @@ class MockZooController:
             "health": data.get("health", 100),
             "hunger": data.get("hunger", 0),
             "energy": data.get("energy", 100),
-            "enclosure_id": data["enclosure_id"],
+            "enclosure_id": enclosure_id,
         }
         self._animals.append(new_animal)
         return {
@@ -222,15 +314,21 @@ class MockZooController:
         }
 
     def feed_animal(self, animal_id: int, food_id: int) -> dict[str, Any]:
-        """Reduziert den Hunger eines Tieres (Fake-Fuetterung).
+        """Reduziert den Hunger eines Tieres und bucht die Futterkosten (Fake-Fuetterung).
 
-        Genutzt von der Route `POST /animals/<id>/feed`.
+        Genutzt von der Route `POST /animals/<id>/feed`. Bucht bei Erfolg
+        eine Ausgabe-Transaktion (siehe `_FOOD_CATALOG`/Modul-Docstring) -
+        dieselbe Vorzeichen-Konvention wie `Transaction.is_valid()` im
+        echten Domain-Modell (negativ = expense).
 
         Args:
             animal_id (int): ID des zu fuetternden Tieres.
-            food_id (int): ID des verwendeten Futters (in diesem Stub nicht
-                gegen einen echten Inventarbestand geprueft, nur auf
-                Plausibilitaet: muss ein positiver int sein).
+            food_id (int): ID des verwendeten Futters. Muss ein positiver
+                int sein; referenziert `_FOOD_CATALOG`, ist aber nicht
+                zwingend darin vorhanden (unbekannte IDs fallen auf
+                `_DEFAULT_FOOD_PRICE`/einen generischen Namen zurueck, statt
+                die Fuetterung abzulehnen - dieser Stub fuehrt keine echte
+                Inventory, die eine unbekannte ID hart validieren koennte).
 
         Returns:
             dict: `{"success": bool, "message": str, "data": dict | None}`.
@@ -246,6 +344,14 @@ class MockZooController:
                 `feed_animal(animal_id, food_id)` aufgerufen wird, then ist
                 `success` `False`, die Nachricht nennt die unbekannte ID, und
                 `data` ist `None`.
+            TC-M25: Given `food_id=2` ("Fleisch", 8.00 pro Einheit aus
+                `_FOOD_CATALOG`), when `feed_animal(animal_id, 2)`
+                aufgerufen wird, then sinkt die per `show_status()`
+                abfragbare `balance` um genau 8.00 gegenueber vorher.
+            TC-M26: Given ein `food_id`, das nicht in `_FOOD_CATALOG` steht,
+                when `feed_animal(animal_id, food_id)` aufgerufen wird, then
+                ist `success` weiterhin `True` und die Ausgabe entspricht
+                `_DEFAULT_FOOD_PRICE`, statt den Aufruf abzulehnen.
         """
         animal = next((a for a in self._animals if a["id"] == animal_id), None)
         if animal is None:
@@ -261,10 +367,23 @@ class MockZooController:
                 "data": None,
             }
 
+        food = next((item for item in _FOOD_CATALOG if item["id"] == food_id), None)
+        food_name = food["name"] if food else f"Futter #{food_id}"
+        price = food["price_per_unit"] if food else _DEFAULT_FOOD_PRICE
+
         animal["hunger"] = max(0, animal["hunger"] - 30)
+
+        new_transaction_id = max((t["id"] for t in self._transactions), default=0) + 1
+        self._transactions.append({
+            "id": new_transaction_id,
+            "transaction_type": "expense",
+            "amount": -price,
+            "description": f"Feeding cost: {animal['name']} ({food_name})",
+        })
+
         return {
             "success": True,
-            "message": f"{animal['name']} was fed (food_id={food_id}).",
+            "message": f"{animal['name']} was fed with {food_name} (-{price:.2f} €).",
             "data": dict(animal),
         }
 
@@ -435,3 +554,33 @@ class MockZooController:
             "message": f"Financial report exported as {format}.",
             "data": {"file_path": str(tmp_path), "mimetype": mimetype},
         }
+
+    def reset(self) -> dict[str, Any]:
+        """Setzt den Stub auf die urspruenglichen Beispieldaten zurueck (Dev-Tool).
+
+        KEIN Teil der ZooController-Schnittstelle (siehe Modul-Docstring) -
+        nur fuer die Route `POST /dev/reset` in `zoo_view.py`, damit man
+        waehrend der lokalen Entwicklung/Demo nicht fuer jeden sauberen
+        Ausgangszustand den ganzen Flask-Prozess neu starten muss. Ruft
+        schlicht `__init__()` erneut auf, wodurch alle Instanzattribute auf
+        ihre in `__init__()` definierten Startwerte zurueckgesetzt werden.
+
+        Args:
+            (keine)
+
+        Returns:
+            dict: `{"success": True, "message": str, "data": None}`.
+            Schlaegt in diesem Stub nie fehl.
+
+        Test:
+            TC-M22: Given `feed_animal()`/`sell_ticket()`/`add_animal()`
+                wurden zuvor mehrfach aufgerufen und haben den Zustand
+                veraendert, when `reset()` aufgerufen wird, then liefert
+                `show_status()` danach wieder exakt die urspruengliche
+                Anzahl/Werte der Beispieltiere, -gehege und -besucher.
+            TC-M23: Given `reset()` wird zweimal hintereinander aufgerufen,
+                when man die beiden Zustaende danach vergleicht, then sind
+                sie identisch (deterministisch, kein sich aufbauender Drift).
+        """
+        self.__init__()
+        return {"success": True, "message": "Zoo reset.", "data": None}

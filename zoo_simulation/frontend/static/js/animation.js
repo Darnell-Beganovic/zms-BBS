@@ -11,6 +11,10 @@
  * ausschliesslich Praesentation.
  *
  * Schwerpunkt: Frontend (Presentation Layer) - Alessio Bellamacina
+ *
+ * Zoo-Spiel-Feature-Ausbau (2026-08-09) ergaenzt mit Unterstuetzung von
+ * Kaiss Saleh (Datenbank-Schwerpunkt): Sprites mit `data-mood="sleeping"`
+ * (siehe game.js, computeMood()) bewegen sich nicht.
  */
 
 const STEP_INTERVAL_MS = 900;
@@ -66,8 +70,19 @@ function clamp(value, min, max) {
  *     `style.left`/`style.top`, when `moveSprite(sprite, pen)` aufgerufen
  *     wird, then wird eine gueltige Position (>= 0) gesetzt, statt mit
  *     NaN abzubrechen.
+ *   TC-A11: Given ein Sprite hat `dataset.mood === "sleeping"` (siehe
+ *     game.js, computeMood()), when `moveSprite(sprite, pen)` aufgerufen
+ *     wird, then bleiben `style.left`/`style.top` unveraendert (schlafende
+ *     Tiere bewegen sich nicht).
+ *   TC-A12: Given ein Sprite bewegt sich zu einem `left`-Wert, der kleiner
+ *     ist als der vorherige, when `moveSprite(sprite, pen)` aufgerufen
+ *     wird, then wird `dataset.facing` auf "left" gesetzt (siehe game.css,
+ *     `.animal-sprite-emoji` wird dadurch gespiegelt).
  */
 function moveSprite(sprite, pen) {
+  if (sprite.dataset.mood === "sleeping") {
+    return;
+  }
   const penRect = pen.getBoundingClientRect();
   const spriteRect = sprite.getBoundingClientRect();
 
@@ -76,8 +91,10 @@ function moveSprite(sprite, pen) {
 
   const currentLeft = parseFloat(sprite.style.left) || 0;
   const currentTop = parseFloat(sprite.style.top) || 0;
+  const newLeft = clamp(currentLeft + randomStep(), 0, maxLeft);
 
-  sprite.style.left = `${clamp(currentLeft + randomStep(), 0, maxLeft)}px`;
+  sprite.dataset.facing = newLeft < currentLeft ? "left" : "right";
+  sprite.style.left = `${newLeft}px`;
   sprite.style.top = `${clamp(currentTop + randomStep(), 0, maxTop)}px`;
 }
 

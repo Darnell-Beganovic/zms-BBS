@@ -6,6 +6,12 @@ Frontend focus area, as required by the module assignment. Shared decisions
 [`planning.md`](planning.md); this document goes into the detail owned by the
 Frontend role: the Flask-based web user interface.
 
+Sections 3.2 and the corresponding entries in sections 3 and 5 were added
+2026-08-09 with support from Kaiss Saleh (Datenbank-Schwerpunkt), documenting
+the Tycoon/game feature expansion he helped build on top of Alessio's
+original Frontend work — see section 3.2 for details and attribution notes
+in the affected source files themselves.
+
 ## 1. Scope of the Frontend Focus
 
 The Frontend focus area covers the Presentation Layer of the layered
@@ -42,9 +48,11 @@ classDiagram
         +show_message(message: str) Response
         +handle_feed_animal_form(request: Request) Response
         +handle_buy_ticket_form(request: Request) Response
+        +handle_add_animal_form(request: Request) Response
     }
 
     class ZooController {
+        <<interface, contract only>>
         -ZooService zoo_service
         -SimulationService simulation_service
         -ReportService report_service
@@ -56,7 +64,29 @@ classDiagram
         +create_report(format: str) dict
     }
 
+    %% MockZooController is a real class this Schwerpunkt owns and
+    %% implements (controller_stub.py) - not just a diagram placeholder.
+    %% reset() (added 2026-08-09, see section 3.2) is deliberately NOT part
+    %% of the ZooController contract above - it will not exist on the real
+    %% controller, so it is shown as MockZooController's own extra method,
+    %% not promoted onto the interface.
+    class MockZooController {
+        -list~dict~ _animals
+        -list~dict~ _enclosures
+        -dict _zoo
+        -list~dict~ _transactions
+        -int _simulation_time
+        +show_status() dict
+        +add_animal(data: dict) dict
+        +feed_animal(animal_id: int, food_id: int) dict
+        +sell_ticket(price: float) dict
+        +run_simulation_step() dict
+        +create_report(format: str) dict
+        +reset() dict
+    }
+
     ZooView --> ZooController : user actions (HTTP requests)
+    ZooController <|.. MockZooController : implements the same\ncontract (dev/demo stand-in)
 ```
 
 ### 2.1 ZooController Result Contract (agreed 2026-08-06)
@@ -114,9 +144,17 @@ Responsibility principle already stated in section 4.
 | `/` | GET | Show zoo dashboard (visitors, enclosures) | `ZooController.show_status()` |
 | `/animals` | GET | List all animals with state (hunger, health, energy) | `ZooController.show_status()` |
 | `/animals/<id>/feed` | POST | Submit feeding form | `ZooController.feed_animal(animal_id, food_id)` |
+| `/animals/add` | POST | Submit "adopt animal" form (see section 3.2) | `ZooController.add_animal(data)` |
 | `/tickets/buy` | POST | Submit ticket purchase form | `ZooController.sell_ticket(price)` |
 | `/simulation/step` | POST | Trigger one simulation tick | `ZooController.run_simulation_step()` |
 | `/reports/financial` | GET | Display / download financial report (CSV/Excel) | `ZooController.create_report(format)` |
+| `/dev/reset`* | POST | **Not part of the contract** — resets the dev-only stub to its seed data (see section 3.2) | *none — calls `MockZooController.reset()` directly, a stub-only method* |
+
+\* `/dev/reset` is intentionally listed with an asterisk: it is a development/demo
+convenience, not a use case the module assignment asks for, and will not exist
+once the real `ZooController` (which persists via SQLite, not an in-memory
+reset) is swapped in. It is kept in this table only so the route inventory
+stays complete and honest about what exists in the code.
 
 ### 3.1 Animal Game View on `/animals` (agreed 2026-08-06)
 
@@ -152,6 +190,59 @@ mechanic. `Enclosure` has no `price` attribute in the domain model and
 would require a Backend/Domain change (Darnell's focus), which is out of
 scope for the Frontend individual submission. Revisit once/if the domain
 model gains an `Enclosure.price` attribute.
+
+### 3.2 Tycoon/Game Feature Expansion (agreed 2026-08-09, with Kaiss Saleh)
+
+Building on the game view from section 3.1, the following was added without
+changing the `ZooController` contract from section 2.1 — every point below
+either (a) wires up a method the contract already promised but no route used
+yet, (b) enriches the `Any`-typed `data` field of an existing method with
+additional keys, or (c) is pure client-side presentation with no new
+`ZooController` call at all. None of it required a change to
+`Klassendiagramm_Code.md`.
+
+- **"Tier adoptieren" (`/animals/add`, see route table above):** the first
+  real usage of `ZooController.add_animal(data)` — present in the class
+  diagram/contract since 2026-08-06 but never wired to a route until now. A
+  modal on the game view lets a visitor pick a name (with a "🎲" random-name
+  helper), species and enclosure; disabled/greyed-out `<option>`s mark
+  enclosures that are full or (client-side only, see below) the wrong
+  habitat for the chosen species. On success, the redirect carries a
+  presentation-only `?highlight=<animal_id>` query parameter (same pattern
+  as `?view=`/`?format=`) so the new animal's sprite is briefly highlighted.
+- **HUD leaderboard (`templates/_hud.html`, shared by `/` and `/animals`):**
+  visitor/capacity bar, simulation day, account balance, a "Zoo-Level" and
+  species-collection readout, and a "Wohlfühl-/Attraktivitäts-Score" —
+  all computed from data `show_status()` already returns to the Frontend
+  (animal/enclosure/visitor data), just not previously displayed together.
+  `show_status()`'s `data` dict gained additive keys (`simulation_time`,
+  `balance`, `food_catalog`) on the stub side to support this — same dict,
+  same method signature, more keys in the already-`Any`-typed payload.
+- **Feeding economy:** `MockZooController.feed_animal()` now books an
+  expense `Transaction` per feeding (sign convention matching
+  `Transaction.is_valid()` in the domain model), priced from a small
+  `_FOOD_CATALOG` stand-in for `FoodItem.price_per_unit` (the stub keeps no
+  real `Inventory`). The feeding forms show a food dropdown with prices
+  instead of a bare "Futter-ID" number field.
+- **Explicitly presentation-only, not enforced by `ZooController`/the stub's
+  domain rules:** which species fit which `enclosure_type` (a
+  `SPECIES_HABITATS` map in `game.js`) and a visitor-count gate on which
+  species can be adopted at all (`SPECIES_UNLOCK_VISITORS`). Both only
+  disable `<option>`s in the adopt form; neither is a server-side rule,
+  since the domain model has no "habitat compatibility" concept to mirror
+  (unlike the enclosure-capacity check, which does mirror
+  `Enclosure.has_capacity()` and is enforced in `MockZooController.add_animal()`
+  regardless of what the client sends).
+- **Achievements, sound, day/night skin, per-species biome theming, mood
+  icons on sprites:** entirely client-side (`localStorage`, CSS
+  `prefers-color-scheme`/keyframe animations, Web Audio API tones) —
+  decorative feedback layered on top of data the Frontend already had, no
+  new `ZooController` interaction of any kind. The day/night skin in
+  particular is explicitly *not* a real `EnvironmentalFactor` simulation
+  (that class exists in the Backend domain but nothing constructs/uses it
+  yet) — it is a cosmetic toggle keyed off `simulation_time`'s parity.
+- **`POST /dev/reset`:** see the route table note above — a stub-only
+  development convenience, not part of this section's contract discussion.
 
 ## 4. OOP Principles Applied in the Frontend
 
@@ -215,6 +306,20 @@ below; they are **not** implemented as automated pytest code.
   `view=list`, then the original plain HTML table is rendered instead,
   with one row per animal — no game-board markup.
 
+### `handle_add_animal_form(request)` (added 2026-08-09, section 3.2)
+
+- TC-F11: Given a POST request with a valid `name`, a known `species` and
+  the `enclosure_id` of an enclosure with free capacity, when the form is
+  submitted, then `ZooController.add_animal()` is called with the parsed
+  values, the new animal appears on the game board after the redirect, and
+  its sprite is briefly highlighted (`?highlight=<id>`).
+- TC-F12: Given a POST request whose `enclosure_id` refers to an enclosure
+  already at full capacity, when the form is submitted, then
+  `ZooController.add_animal()` reports failure ("full capacity"), no
+  animal is created, and the error message is shown after the redirect —
+  the same "Flask validates shape, the controller validates domain rules"
+  split used by `handle_feed_animal_form()`/`handle_buy_ticket_form()`.
+
 ## 6. Open Questions / Assumptions
 
 - User authentication and role-based access are explicitly out of scope for
@@ -232,3 +337,14 @@ below; they are **not** implemented as automated pytest code.
   were agreed between Frontend and Backend on 2026-08-06 and should be
   reflected in `planning_backend_darnell.md`'s `ZooController` diagram once
   Darnell implements the real controller.
+- As of 2026-08-09, the situation in the point above is unchanged:
+  `controller/zoo_controller.py`, `services/zoo_service.py`,
+  `services/simulation_service.py` and `simulation/simulation_engine.py` are
+  still empty, and `zoo_simulation/main.py` (the project's actual entry
+  point per the root `README.md`) is still empty too. Section 3.2's Tycoon
+  expansion was therefore built the same way as the original game view:
+  entirely against `controller_stub.py`. This is a known, accepted
+  limitation of the Frontend submission, not something the Frontend focus
+  can close on its own — wiring `main.py` to actually start the
+  application (Flask app, or otherwise) is shared integration work per
+  `planning.md`, and swapping in the real `ZooController` is Darnell's.

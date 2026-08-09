@@ -1,23 +1,75 @@
 /*
- * game.css - Styling fuer die 2D-Spielansicht von /animals (Gehege-Boxen,
- * Tier-Sprites, Klick-Popup). Getrennt von base.css, da nur die
- * Spielansicht (templates/animals_game.html) das braucht.
+ * game.css - Styling fuer die 2D-Spielansicht von /animals (Zoo-Welt mit
+ * Himmel, Gehege-Boxen, Tier-Sprites, Klick-Popup). Getrennt von base.css,
+ * da nur die Spielansicht (templates/animals_game.html) das braucht.
  *
  * Schwerpunkt: Frontend (Presentation Layer) - Alessio Bellamacina
+ *
+ * Visuelles Redesign (2026-08-09) ergaenzt mit Unterstuetzung von
+ * Kaiss Saleh (Datenbank-Schwerpunkt): Himmel-Hintergrund mit Tag/Nacht-
+ * Variante (rein dekorativ, aus dem bereits vorhandenen simulation_time
+ * abgeleitet - siehe animals_game.html, KEINE echte EnvironmentalFactor-
+ * Anbindung, die existiert im Backend noch nicht), Gehege-Biome-Theming
+ * ueber data-enclosure-type, animierte Sprites (Idle-Wippen, Schatten,
+ * Blickrichtung, Hover-Wackeln), Modal-Pop-in, Achievement-Shimmer.
+ *
+ * Tycoon-Feinschliff (2026-08-09, zweite Ausbaustufe): Pro-Gehege-Fuetter-
+ * Button, Zufallsname-Reihe im Adopt-Formular, Spotlight-Glow fuers frisch
+ * adoptierte Tier (siehe game.js applyHighlight()).
  */
 
+/* Zoo-Welt: Himmel-/Boden-Hintergrund hinter dem Spielbrett */
+
+.zoo-world {
+  position: relative;
+  border: 3px solid #6b4f2a;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  background: linear-gradient(180deg, #8ed2f2 0%, #bfe8c9 65%, #9ed48a 100%);
+  box-shadow: inset 0 0 0 3px rgba(255, 255, 255, 0.25), 0 0.4rem 1rem rgba(0, 0, 0, 0.2);
+}
+
+.zoo-world::before {
+  content: "";
+  position: absolute;
+  top: 1rem;
+  right: 1.5rem;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff6c8 0%, #ffe37a 60%, transparent 72%);
+  box-shadow: 0 0 2rem 0.5rem rgba(255, 227, 122, 0.55);
+}
+
+.zoo-world--night {
+  background: linear-gradient(180deg, #0b1633 0%, #16223f 55%, #223a2c 100%);
+  border-color: #3a2c14;
+}
+
+.zoo-world--night::before {
+  background: radial-gradient(circle, #f4f4f4 0%, #cfd7e6 60%, transparent 72%);
+  box-shadow: 0 0 1.5rem 0.4rem rgba(207, 215, 230, 0.5);
+}
+
 .zoo-board {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: 1.25rem;
+  z-index: 1;
 }
+
+/* Gehege - Grundform + Biome-Varianten je nach enclosure_type */
 
 .enclosure-pen {
   position: relative;
   width: 260px;
   height: 180px;
-  border: 3px solid #6b4f2a;
+  border: 4px solid #6b4f2a;
   border-radius: 0.75rem;
+  overflow: hidden;
   background-color: #cfe8c8;
   background-image: repeating-linear-gradient(
     45deg,
@@ -26,41 +78,152 @@
     #bfe0b6 10px,
     #bfe0b6 20px
   );
-  overflow: hidden;
+  box-shadow: 0 0.3rem 0.6rem rgba(0, 0, 0, 0.25), inset 0 0 0 2px rgba(255, 255, 255, 0.15);
+}
+
+.enclosure-pen[data-enclosure-type="Savanna" i] {
+  border-color: #a9772f;
+  background-color: #e8d093;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #e8d093,
+    #e8d093 10px,
+    #dcc07c 10px,
+    #dcc07c 20px
+  );
+}
+
+.enclosure-pen[data-enclosure-type="Grassland" i] {
+  border-color: #4c7a2e;
+  background-color: #9fe08a;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #9fe08a,
+    #9fe08a 10px,
+    #8ad073 10px,
+    #8ad073 20px
+  );
+}
+
+.enclosure-pen[data-enclosure-type="Polar" i] {
+  border-color: #6fa9c9;
+  background-color: #eaf6fb;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #eaf6fb,
+    #eaf6fb 10px,
+    #d3ecf7 10px,
+    #d3ecf7 20px
+  );
+}
+
+.enclosure-pen[data-enclosure-type="Aquatic" i] {
+  border-color: #1f6f8b;
+  background-color: #7fd0e6;
+  background-image: repeating-linear-gradient(
+    45deg,
+    #7fd0e6,
+    #7fd0e6 10px,
+    #63bcd6 10px,
+    #63bcd6 20px
+  );
 }
 
 @media (prefers-color-scheme: dark) {
+  /* Ein einzelner abdunkelnder Inset-Schatten statt je Biome-Variante eine
+     eigene dunkle Palette zu pflegen - trifft nur den Hintergrund, nicht
+     die (absolut positionierten, weiter oben liegenden) Sprites/Badges. */
   .enclosure-pen {
-    border-color: #8a6a3a;
-    background-color: #234023;
-    background-image: repeating-linear-gradient(
-      45deg,
-      #234023,
-      #234023 10px,
-      #1c351c 10px,
-      #1c351c 20px
-    );
+    box-shadow: inset 0 0 0 999px rgba(10, 14, 20, 0.45), 0 0.3rem 0.6rem rgba(0, 0, 0, 0.5);
   }
 }
 
 .enclosure-label {
   position: absolute;
-  top: 0.25rem;
+  top: 0.35rem;
   left: 0.5rem;
-  font-size: 0.8rem;
-  font-weight: bold;
-  background: rgba(255, 255, 255, 0.7);
-  padding: 0 0.3rem;
-  border-radius: 0.2rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #2c2417;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  box-shadow: 0 0.1rem 0.3rem rgba(0, 0, 0, 0.25);
   z-index: 2;
 }
 
-@media (prefers-color-scheme: dark) {
-  .enclosure-label {
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-  }
+.enclosure-badge {
+  position: absolute;
+  top: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #2c2417;
+  background: rgba(255, 255, 255, 0.85);
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  box-shadow: 0 0.1rem 0.3rem rgba(0, 0, 0, 0.2);
+  z-index: 2;
 }
+
+.enclosure-badge-capacity {
+  right: 0.5rem;
+}
+
+.enclosure-badge-temperature {
+  right: 0.5rem;
+  top: 1.5rem;
+}
+
+.enclosure-cleanliness {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.35rem;
+  width: calc(100% - 1rem);
+  height: 0.4rem;
+  border-radius: 0.2rem;
+  background: rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  z-index: 2;
+  box-shadow: 0 0.05rem 0.2rem rgba(0, 0, 0, 0.3);
+}
+
+.enclosure-cleanliness-fill {
+  height: 100%;
+  transition: width 0.6s ease;
+}
+
+.enclosure-cleanliness-fill--good {
+  background: linear-gradient(90deg, #2f7a2f, #6fc76f);
+}
+
+.enclosure-cleanliness-fill--medium {
+  background: linear-gradient(90deg, #b3901f, #e6c34d);
+}
+
+.enclosure-cleanliness-fill--bad {
+  background: linear-gradient(90deg, #a4271c, #d9584a);
+}
+
+.enclosure-feed-button {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.55rem;
+  width: 1.6rem;
+  height: 1.6rem;
+  padding: 0;
+  font-size: 0.85rem;
+  line-height: 1;
+  border-radius: 999px;
+  box-shadow: 0 0.12rem 0 var(--zoo-accent-dark, #c97b12);
+  z-index: 3;
+}
+
+.enclosure-feed-button:active {
+  transform: translateY(0.1rem);
+  box-shadow: none;
+}
+
+/* Tier-Sprites */
 
 .animal-sprite {
   position: absolute;
@@ -73,11 +236,95 @@
   user-select: none;
   transition: left 0.6s linear, top 0.6s linear;
   z-index: 1;
+  animation: sprite-idle 1.6s ease-in-out infinite;
+}
+
+.animal-sprite::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -0.2rem;
+  width: 1.5rem;
+  height: 0.4rem;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 50%;
+  transform: translateX(-50%);
+  z-index: -1;
 }
 
 .animal-sprite:hover,
 .animal-sprite:focus-visible {
-  transform: scale(1.2);
+  animation: sprite-wiggle 0.4s ease-in-out forwards;
+  z-index: 3;
+}
+
+@keyframes sprite-idle {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes sprite-wiggle {
+  0% {
+    transform: scale(1.2) rotate(0deg);
+  }
+  25% {
+    transform: scale(1.2) rotate(-8deg);
+  }
+  75% {
+    transform: scale(1.2) rotate(8deg);
+  }
+  100% {
+    transform: scale(1.2) rotate(0deg);
+  }
+}
+
+/* Kurze Hervorhebung fuers frisch adoptierte Tier, siehe game.js
+   applyHighlight() - laeuft zusaetzlich zur Idle-Animation (comma-
+   separated animation-Liste), daher kein Konflikt mit sprite-idle. */
+.animal-sprite.newly-adopted {
+  animation: sprite-idle 1.6s ease-in-out infinite, spotlight-glow 0.9s ease-in-out 4;
+}
+
+@keyframes spotlight-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(255, 216, 115, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 10px rgba(255, 216, 115, 0.95));
+  }
+}
+
+.animal-sprite-emoji {
+  display: inline-block;
+  transition: transform 0.2s ease;
+}
+
+.animal-sprite[data-facing="left"] .animal-sprite-emoji {
+  transform: scaleX(-1);
+}
+
+.animal-sprite-mood {
+  position: absolute;
+  top: -0.6rem;
+  right: -0.6rem;
+  font-size: 1rem;
+  animation: mood-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes mood-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.25);
+  }
 }
 
 .animal-sprite-name {
@@ -100,26 +347,36 @@
 .animal-popup {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(10, 14, 20, 0.55);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 10;
 }
 
-.animal-popup.hidden {
-  display: none;
-}
-
 .animal-popup-content {
-  background: Canvas;
-  color: CanvasText;
-  border-radius: 0.5rem;
+  background: var(--zoo-panel-bg, Canvas);
+  color: var(--zoo-ink, CanvasText);
+  border: 3px solid var(--zoo-accent-dark, #c97b12);
+  border-radius: 0.9rem;
   padding: 1.5rem;
   min-width: 260px;
   max-width: 90vw;
   position: relative;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.35);
+  box-shadow: 0 0.6rem 2rem rgba(0, 0, 0, 0.4);
+  animation: modal-pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes modal-pop {
+  from {
+    transform: scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 .animal-popup-close {
@@ -132,6 +389,12 @@
   line-height: 1;
   cursor: pointer;
   color: inherit;
+  box-shadow: none;
+}
+
+.animal-popup-close:active {
+  transform: none;
+  box-shadow: none;
 }
 
 .animal-popup-stats {
@@ -146,11 +409,59 @@
   margin-bottom: 0.75rem;
 }
 
-.animal-popup-feed-form input {
-  width: 6rem;
+.animal-popup-feed-form select {
+  flex: 1;
 }
 
-.animal-popup-placeholder-actions button {
-  opacity: 0.5;
-  cursor: not-allowed;
+.add-animal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.add-animal-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.add-animal-form select,
+.add-animal-form input {
+  width: 100%;
+}
+
+.add-animal-name-row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.add-animal-name-row input {
+  flex: 1;
+}
+
+.add-animal-name-row button {
+  flex: 0 0 auto;
+  padding: 0.4rem 0.6rem;
+}
+
+/* Achievement-Toast (siehe static/js/achievements.js) - Grundform lebt in
+   base.css (sitewide), hier nur die zusaetzliche Spiel-Optik. */
+
+.achievement-toast {
+  background: linear-gradient(135deg, #ffe9a8, #ffd873 45%, #ffb84d);
+  color: #402a05;
+  border-color: var(--zoo-accent-dark, #c97b12);
+  animation: toast-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes toast-in {
+  from {
+    transform: translate(-50%, 1rem);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
 }

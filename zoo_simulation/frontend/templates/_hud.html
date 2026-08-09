@@ -1,0 +1,59 @@
+{#
+  _hud.html - HUD-Leiste (Besucher, Simulationstag, Kontostand, Zoo-Level,
+  Artensammlung, Attraktivitaet, Wohlfuehl-Score) fuer Dashboard und
+  Spielansicht. Als Partial ausgelagert, damit index.html und
+  animals_game.html dasselbe Markup nutzen, statt es zu duplizieren.
+
+  Erwartet im Kontext: zoo (dict mit current_visitors/maximum_visitors),
+  simulation_time (int), balance (float), animals_json (JSON-String, siehe
+  zoo_view.py show_zoo_status()/show_animals() - beide reichen es
+  mittlerweile durch). Die von Tierdaten abhaengigen Karten (Level,
+  Artensammlung, Attraktivitaet, Wohlfuehl-Score) werden nur gerendert, wenn
+  animals_json im Kontext vorhanden ist, und clientseitig befuellt (siehe
+  static/js/zoo_stats.js, sitewide via base.html eingebunden).
+
+  Ergaenzt von Kaiss Saleh (Datenbank-Schwerpunkt) im Rahmen des
+  Zoo-Spiel-Feature-Ausbaus (2026-08-09), gemeinsam mit Alessio
+  Bellamacina (Frontend-Schwerpunkt).
+#}
+{% set current_visitors = zoo.get("current_visitors", 0) %}
+{% set maximum_visitors = zoo.get("maximum_visitors", 0) %}
+{% set visitor_pct = (current_visitors / maximum_visitors * 100) if maximum_visitors else 0 %}
+<div class="zoo-hud">
+  <div class="hud-stat">
+    <span class="hud-stat-label">Besucher</span>
+    <span class="hud-stat-value" data-current-visitors="{{ current_visitors }}" data-maximum-visitors="{{ maximum_visitors }}">{{ current_visitors }} / {{ maximum_visitors }}</span>
+    <div class="hud-progress">
+      <div class="hud-progress-fill" style="width: {{ '%.0f'|format(visitor_pct) }}%"></div>
+    </div>
+  </div>
+  <div class="hud-stat">
+    <span class="hud-stat-label">Simulationstag</span>
+    <span class="hud-stat-value">☀️ Tag {{ simulation_time }}</span>
+  </div>
+  <div class="hud-stat">
+    <span class="hud-stat-label">Kontostand</span>
+    <span class="hud-stat-value">{{ "%.2f"|format(balance) }} €</span>
+  </div>
+  {% if animals_json is defined %}
+    <div class="hud-stat">
+      <span class="hud-stat-label">Zoo-Level</span>
+      <span class="hud-stat-value" id="hud-level-value">–</span>
+      <div class="hud-progress">
+        <div class="hud-progress-fill" id="hud-level-progress-fill" style="width: 0%"></div>
+      </div>
+    </div>
+    <div class="hud-stat">
+      <span class="hud-stat-label">Tierarten</span>
+      <span class="hud-stat-value" id="hud-species-value">–</span>
+    </div>
+    <div class="hud-stat">
+      <span class="hud-stat-label">Attraktivität</span>
+      <span class="hud-stat-value" id="hud-attractiveness-value">–</span>
+    </div>
+    <div class="hud-stat">
+      <span class="hud-stat-label">Wohlfühl-Score</span>
+      <span class="hud-stat-value" id="hud-welfare-value">–</span>
+    </div>
+  {% endif %}
+</div>

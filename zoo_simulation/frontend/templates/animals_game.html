@@ -1,3 +1,16 @@
+{#
+  Zoo-Spiel-Feature-Ausbau (2026-08-09) ergaenzt mit Unterstuetzung von
+  Kaiss Saleh (Datenbank-Schwerpunkt), gemeinsam mit Alessio Bellamacina
+  (Frontend-Schwerpunkt): HUD-Leiste, Gehege-Badges (Sauberkeit/Temperatur/
+  Kapazitaet), "Alle hungrigen fuettern"-Schnellaktion (global + pro
+  Gehege), "Tier adoptieren"-Modal (verdrahtet ZooController.add_animal(),
+  siehe zoo_view.py) mit Lebensraum-/Fortschritts-Filterung und
+  Zufallsname-Button, Spotlight-Hervorhebung fuers frisch adoptierte Tier,
+  Achievement-Toasts, Futterauswahl mit Preis statt freier Zahl (bucht
+  Kosten in controller_stub.py feed_animal()) sowie das visuelle Redesign
+  (Zoo-Welt mit Himmel/Tag-Nacht, Gehege-Biome je enclosure_type) - siehe
+  static/css/game.css.
+#}
 {% extends "base.html" %}
 
 {% block title %}Tiere – Spielansicht – Zoo Management System{% endblock %}
@@ -12,13 +25,46 @@
     <a href="{{ url_for('zoo.list_animals', view='list') }}">Listenansicht</a>
   </div>
 
+  {% include "_hud.html" %}
+
+  <div class="game-toolbar">
+    <button type="button" id="feed-hungry-button">🍽️ Alle hungrigen füttern</button>
+    <button type="button" id="open-add-animal-modal">➕ Tier hinzufügen</button>
+  </div>
+
   {% if enclosures %}
-    <div class="zoo-board">
-      {% for enclosure in enclosures %}
-        <div class="enclosure-pen" data-enclosure-id="{{ enclosure.id }}">
-          <span class="enclosure-label">{{ enclosure.name }} ({{ enclosure.enclosure_type }})</span>
-        </div>
-      {% endfor %}
+    {#
+      "Tag/Nacht"-Himmel ist rein dekorativ und leitet sich aus dem
+      simulation_time-Zaehler ab, den show_status() jetzt liefert - siehe
+      controller_stub.py. Das ist bewusst NICHT an eine echte
+      EnvironmentalFactor-Simulation gekoppelt (existiert im Backend noch
+      nicht), nur ein optischer Bonus fuer jeden zweiten Simulationsschritt.
+    #}
+    <div class="zoo-world{% if simulation_time is odd %} zoo-world--night{% endif %}">
+      <div class="zoo-board" data-highlight-id="{{ highlight_animal_id or '' }}">
+        {% for enclosure in enclosures %}
+          {#
+            enclosure.cleanliness ist im Stub eine Bruchzahl 0-1 (siehe
+            controller_stub.py), nicht die 0-100-Skala des echten
+            Enclosure-Domain-Modells - dieselbe Umrechnung (*100) wie
+            bereits in index.html verwendet, damit beide Ansichten
+            konsistent denselben Wert zeigen.
+          #}
+          {% set cleanliness_pct = enclosure.cleanliness * 100 %}
+          {% set cleanliness_level = "good" if cleanliness_pct >= 60 else ("medium" if cleanliness_pct >= 30 else "bad") %}
+          <div class="enclosure-pen" data-enclosure-id="{{ enclosure.id }}" data-enclosure-type="{{ enclosure.enclosure_type }}">
+            <span class="enclosure-label">{{ enclosure.name }} ({{ enclosure.enclosure_type }})</span>
+            <span class="enclosure-badge enclosure-badge-capacity">
+              {{ enclosure.get("occupied_count", 0) }}/{{ enclosure.capacity }}
+            </span>
+            <span class="enclosure-badge enclosure-badge-temperature">{{ enclosure.temperature }} °C</span>
+            <div class="enclosure-cleanliness" title="Sauberkeit: {{ "%.0f"|format(cleanliness_pct) }}%">
+              <div class="enclosure-cleanliness-fill enclosure-cleanliness-fill--{{ cleanliness_level }}" style="width: {{ "%.0f"|format(cleanliness_pct) }}%"></div>
+            </div>
+            <button type="button" class="enclosure-feed-button" data-enclosure-id="{{ enclosure.id }}" title="Hungrige Tiere in diesem Gehege füttern">🍽️</button>
+          </div>
+        {% endfor %}
+      </div>
     </div>
   {% else %}
     <p>Es sind noch keine Gehege angelegt.</p>
@@ -36,7 +82,11 @@
         <li>Energy: <span id="animal-popup-energy"></span></li>
       </ul>
       <form method="post" id="animal-popup-feed-form" class="animal-popup-feed-form" action="">
-        <input type="number" name="food_id" min="1" required placeholder="Futter-ID">
+        <select name="food_id" required>
+          {% for food in food_catalog %}
+            <option value="{{ food.id }}">{{ food.name }} ({{ "%.2f"|format(food.price_per_unit) }} €)</option>
+          {% endfor %}
+        </select>
         <button type="submit">Füttern</button>
       </form>
       <div class="animal-popup-placeholder-actions">
@@ -47,7 +97,55 @@
     </div>
   </div>
 
+  <div id="add-animal-modal" class="animal-popup hidden">
+    <div class="animal-popup-content">
+      <button type="button" id="add-animal-modal-close" class="animal-popup-close" aria-label="Schließen">&times;</button>
+      <h3>Tier adoptieren</h3>
+      <form method="post" action="{{ url_for('zoo.handle_add_animal_form') }}" class="add-animal-form">
+        <label>
+          Name
+          <div class="add-animal-name-row">
+            <input type="text" name="name" id="add-animal-name" required maxlength="50" placeholder="z. B. Mufasa">
+            <button type="button" id="add-animal-random-name" title="Zufallsname">🎲</button>
+          </div>
+        </label>
+        <label>
+          Art
+          <select name="species" id="add-animal-species" required>
+            {% for species in known_species %}
+              <option value="{{ species }}" data-label="{{ species }}">{{ species }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label>
+          Gehege
+          <select name="enclosure_id" id="add-animal-enclosure" required>
+            {% for enclosure in enclosures %}
+              {#
+                data-full/data-label sind die Server-Wahrheit (Kapazitaet,
+                Basis-Beschriftung); game.js liest sie aus, um zusaetzlich
+                nach Lebensraum (Art <-> enclosure_type) zu filtern, ohne
+                die Kapazitaetspruefung zu duplizieren oder zu widersprechen.
+                disabled bei voller Kapazitaet bleibt zusaetzlich auch ohne
+                JavaScript als serverseitige Grundabsicherung erhalten.
+              #}
+              <option value="{{ enclosure.id }}"
+                      data-enclosure-type="{{ enclosure.enclosure_type }}"
+                      data-full="{{ "true" if not enclosure.get("has_capacity", True) else "false" }}"
+                      data-label="{{ enclosure.name }} ({{ enclosure.get("occupied_count", 0) }}/{{ enclosure.capacity }})"
+                      {% if not enclosure.get("has_capacity", True) %}disabled{% endif %}>
+                {{ enclosure.name }} ({{ enclosure.get("occupied_count", 0) }}/{{ enclosure.capacity }}){% if not enclosure.get("has_capacity", True) %} – voll{% endif %}
+              </option>
+            {% endfor %}
+          </select>
+        </label>
+        <button type="submit">Adoptieren</button>
+      </form>
+    </div>
+  </div>
+
   <script id="animals-data" type="application/json">{{ animals_json | safe }}</script>
+  <script id="enclosures-data" type="application/json">{{ enclosures | tojson }}</script>
 {% endblock %}
 
 {% block scripts %}

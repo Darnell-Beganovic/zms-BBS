@@ -1,46 +1,211 @@
 /*
- * base.css - gemeinsames Layout fuer alle Seiten (Header, Nav, Tabellen,
- * Flash-Messages). Ausgelagert aus templates/base.html, damit HTML und CSS
- * strikt getrennt bleiben (kein inline <style>).
+ * base.css - gemeinsames "Spiel-Chrome" fuer alle Seiten (Titelleiste,
+ * Panels, Buttons, Flash-Banner, HUD). Ausgelagert aus templates/base.html,
+ * damit HTML und CSS strikt getrennt bleiben (kein inline <style>).
  *
  * Schwerpunkt: Frontend (Presentation Layer) - Alessio Bellamacina
+ *
+ * Visuelles Redesign (2026-08-09) ergaenzt mit Unterstuetzung von
+ * Kaiss Saleh (Datenbank-Schwerpunkt): durchgaengige Spiel-Optik (Palette,
+ * Panels, "chunky" Buttons, animierte HUD-Balken) statt klassischem
+ * Formular-Look - siehe static/css/game.css fuer die eigentliche
+ * Spielbrett-Welt (Gehege/Sprites).
  */
 
 :root {
   color-scheme: light dark;
+
+  --zoo-bg-top: #bfe3f7;
+  --zoo-bg-bottom: #eaf7d8;
+  --zoo-panel-bg: #fffdf6;
+  --zoo-panel-border: #d8c99a;
+  --zoo-ink: #2c2417;
+  --zoo-ink-soft: #6b5f47;
+  --zoo-accent: #efa32f;
+  --zoo-accent-dark: #c97b12;
+  --zoo-accent-2: #3d8b3d;
+  --zoo-danger: #c0392b;
+  --zoo-info: #2f6fa8;
+  --zoo-shadow: rgba(43, 33, 11, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --zoo-bg-top: #0f1b2b;
+    --zoo-bg-bottom: #16281a;
+    --zoo-panel-bg: #241d14;
+    --zoo-panel-border: #5a4a2c;
+    --zoo-ink: #f3ead9;
+    --zoo-ink-soft: #c9b998;
+    --zoo-accent: #f4b342;
+    --zoo-accent-dark: #d68f1f;
+    --zoo-accent-2: #59b568;
+    --zoo-danger: #e0685a;
+    --zoo-info: #6fb0e6;
+    --zoo-shadow: rgba(0, 0, 0, 0.6);
+  }
+}
+
+* {
+  box-sizing: border-box;
 }
 
 body {
-  font-family: system-ui, sans-serif;
-  max-width: 60rem;
-  margin: 2rem auto;
-  padding: 0 1rem;
+  font-family: ui-rounded, "Segoe UI Rounded", "Nunito", system-ui, sans-serif;
+  color: var(--zoo-ink);
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 3rem;
+  min-height: 100vh;
+  background: linear-gradient(180deg, var(--zoo-bg-top) 0%, var(--zoo-bg-bottom) 60%);
+  background-attachment: fixed;
 }
 
 header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  border-bottom: 1px solid #8888;
-  padding-bottom: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.75rem;
+  color: #402a05;
+  background: linear-gradient(180deg, #ffd873 0%, var(--zoo-accent) 100%);
+  border: 3px solid var(--zoo-accent-dark);
+  border-radius: 1rem;
+  padding: 0.75rem 1.25rem;
+  margin-bottom: 1.25rem;
+  box-shadow: 0 0.4rem 0 var(--zoo-accent-dark), 0 0.7rem 1.2rem var(--zoo-shadow);
+}
+
+header h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+nav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
 }
 
 nav a {
-  margin-right: 1rem;
+  color: #402a05;
+  font-weight: 700;
+  text-decoration: none;
+  padding: 0.35rem 0.7rem;
+  border-radius: 0.6rem;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+nav a:hover {
+  background: rgba(255, 255, 255, 0.65);
+  transform: translateY(-1px);
+}
+
+main {
+  background: var(--zoo-panel-bg);
+  border: 3px solid var(--zoo-panel-border);
+  border-radius: 1rem;
+  padding: 1.25rem 1.5rem 1.75rem;
+  box-shadow: 0 0.5rem 1.5rem var(--zoo-shadow);
+}
+
+main a {
+  color: var(--zoo-info);
+  font-weight: 600;
+}
+
+h2, h3 {
+  color: var(--zoo-accent-dark);
+}
+
+@media (prefers-color-scheme: dark) {
+  h2, h3 {
+    color: var(--zoo-accent);
+  }
+}
+
+/* Panels - "Karten" fuer thematisch zusammengehoerige Formulare/Abschnitte
+   (Ticket kaufen, Simulation, Gehege-Uebersicht, ...), siehe index.html /
+   financial_report.html / animals.html. */
+.panel {
+  border: 2px solid var(--zoo-panel-border);
+  border-radius: 0.85rem;
+  padding: 1rem 1.1rem;
+  margin: 1.1rem 0;
+  background: #fbf3df;
+  background: color-mix(in srgb, var(--zoo-panel-bg) 90%, var(--zoo-accent) 10%);
+}
+
+.panel > h3:first-child,
+.panel > h2:first-child {
+  margin-top: 0;
 }
 
 .game-toolbar {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
   margin-bottom: 1rem;
 }
 
-.food-id-input {
-  width: 6rem;
+.game-toolbar h2 {
+  margin: 0;
+}
+
+/* Buttons - sitewide "chunky" Spiel-Optik; spezifischere Klassen
+   (.sound-toggle, .animal-popup-close, ...) ueberschreiben gezielt. */
+button,
+input[type="submit"] {
+  font: inherit;
+  font-weight: 700;
+  color: #402a05;
+  background: linear-gradient(180deg, #ffd873 0%, var(--zoo-accent) 100%);
+  border: 2px solid var(--zoo-accent-dark);
+  border-radius: 0.6rem;
+  padding: 0.5rem 1rem;
+  cursor: pointer;
+  box-shadow: 0 0.22rem 0 var(--zoo-accent-dark);
+  transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.15s ease;
+}
+
+button:hover {
+  filter: brightness(1.06);
+}
+
+button:active {
+  transform: translateY(0.18rem);
+  box-shadow: 0 0.04rem 0 var(--zoo-accent-dark);
+}
+
+button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+  opacity: 0.65;
+  box-shadow: none;
+  transform: none;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  padding: 0.4rem 0.6rem;
+  border: 2px solid var(--zoo-panel-border);
+  border-radius: 0.5rem;
+  background: var(--zoo-panel-bg);
+  color: var(--zoo-ink);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 3px solid var(--zoo-info);
+  outline-offset: 1px;
 }
 
 .price-input {
@@ -48,40 +213,218 @@ nav a {
 }
 
 table {
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   width: 100%;
   margin: 1rem 0;
+  border: 2px solid var(--zoo-panel-border);
+  border-radius: 0.6rem;
+  overflow: hidden;
 }
 
 th,
 td {
-  border: 1px solid #8888;
-  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--zoo-panel-border);
+  padding: 0.45rem 0.7rem;
   text-align: left;
+}
+
+thead th {
+  background: color-mix(in srgb, var(--zoo-accent) 35%, var(--zoo-panel-bg));
+  font-weight: 800;
+}
+
+tbody tr:nth-child(even) {
+  background: color-mix(in srgb, var(--zoo-panel-bg) 92%, var(--zoo-accent) 8%);
+}
+
+tbody tr:hover {
+  background: color-mix(in srgb, var(--zoo-panel-bg) 80%, var(--zoo-accent) 20%);
 }
 
 ul.flash-messages {
   list-style: none;
   padding: 0;
+  margin: 0 0 1rem;
 }
 
 .flash {
-  padding: 0.6rem 0.8rem;
-  border-radius: 0.3rem;
+  padding: 0.65rem 1rem;
+  border-radius: 0.6rem;
   margin-bottom: 0.5rem;
+  font-weight: 700;
+  border: 2px solid transparent;
+  box-shadow: 0 0.2rem 0.5rem var(--zoo-shadow);
+  animation: flash-in 0.25s ease;
+}
+
+@keyframes flash-in {
+  from {
+    transform: translateY(-0.6rem);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
 .flash-success {
-  background: #1e7e34;
-  color: #fff;
+  background: #d9f2d9;
+  border-color: var(--zoo-accent-2);
+  color: #1c4d1c;
+}
+
+.flash-success::before {
+  content: "✅ ";
 }
 
 .flash-error {
-  background: #a83232;
-  color: #fff;
+  background: #fbdedb;
+  border-color: var(--zoo-danger);
+  color: #7a1d12;
+}
+
+.flash-error::before {
+  content: "⚠️ ";
 }
 
 .flash-info {
-  background: #3468a8;
-  color: #fff;
+  background: #dcebf8;
+  border-color: var(--zoo-info);
+  color: #123a5c;
+}
+
+.flash-info::before {
+  content: "ℹ️ ";
+}
+
+@media (prefers-color-scheme: dark) {
+  .flash-success {
+    background: #17321a;
+    color: #b6e6b6;
+  }
+
+  .flash-error {
+    background: #3a1712;
+    color: #f3b6ac;
+  }
+
+  .flash-info {
+    background: #122536;
+    color: #b9d9f3;
+  }
+}
+
+.sound-toggle {
+  background: var(--zoo-panel-bg);
+  color: #402a05;
+  border: 2px solid var(--zoo-accent-dark);
+  border-radius: 999px;
+  width: 2.2rem;
+  height: 2.2rem;
+  padding: 0;
+  font-size: 1.1rem;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: none;
+}
+
+.sound-toggle:active {
+  transform: scale(0.9);
+  box-shadow: none;
+}
+
+.sound-toggle[aria-pressed="true"] {
+  opacity: 0.55;
+}
+
+/* HUD-Leiste (Dashboard + Spielansicht), siehe templates/_hud.html */
+
+.zoo-hud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.hud-stat {
+  flex: 1 1 11rem;
+  background: color-mix(in srgb, var(--zoo-panel-bg) 85%, white 15%);
+  border: 2px solid var(--zoo-panel-border);
+  border-radius: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  box-shadow: 0 0.2rem 0 var(--zoo-panel-border);
+}
+
+.hud-stat-label {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--zoo-ink-soft);
+}
+
+.hud-stat-value {
+  display: block;
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.hud-progress {
+  height: 0.55rem;
+  border-radius: 0.3rem;
+  background: rgba(0, 0, 0, 0.12);
+  margin-top: 0.35rem;
+  overflow: hidden;
+}
+
+.hud-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--zoo-info), color-mix(in srgb, var(--zoo-info) 55%, white));
+  transition: width 0.6s ease;
+}
+
+/* Generisches Sichtbarkeits-Utility - wird sitewide gebraucht (Achievement-
+   Toast in base.html, Modals/Popups in der Spielansicht, Tabellenzeilen-
+   Filter in animal_list.js), deshalb hier statt in game.css, das nicht auf
+   jeder Seite geladen wird.
+
+   !important ist hier bewusst: .animal-popup (game.css) setzt selbst
+   `display: flex` mit derselben Selektor-Spezifitaet (eine Klasse) wie
+   `.hidden` - ohne !important wuerde .animal-popup gewinnen, weil game.css
+   nach base.css geladen wird (Kaskade entscheidet bei Gleichstand nach
+   Ladereihenfolge). Ein Sichtbarkeits-Utility muss aber immer gewinnen,
+   unabhaengig davon, was die jeweilige Komponente sonst an `display`
+   setzt - das ist der Sinn eines "hidden"-Utilities. */
+.hidden {
+  display: none !important;
+}
+
+.achievement-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--zoo-panel-bg);
+  color: var(--zoo-ink);
+  border: 2px solid var(--zoo-accent-dark);
+  border-radius: 0.6rem;
+  padding: 0.75rem 1.25rem;
+  box-shadow: 0 0.5rem 1.5rem var(--zoo-shadow);
+  z-index: 20;
+  font-weight: 800;
+}
+
+.animal-list-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.animal-list-controls input[type="search"] {
+  flex: 1 1 12rem;
 }
