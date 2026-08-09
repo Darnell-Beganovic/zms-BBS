@@ -238,6 +238,36 @@ class ZooService:
         # the same reason as add_animal().
         self.get_zoo().add_employee(self._employee_repository.get_by_id(new_id))
 
+    def clean_enclosure(self, enclosure_id: int) -> None:
+        """Clean a stored enclosure, resetting its cleanliness to maximum.
+
+        Added 2026-08-09: not part of the original `ZooService` diagram,
+        which had no manual-cleaning entry point at all - `Enclosure`
+        only ever got cleaner via `Zookeeper.clean_enclosure()`, which
+        nothing above the domain layer ever called (see
+        `planning_backend_darnell.md` section 2.9 for the full
+        rationale).
+
+        Args:
+            enclosure_id (int): id of the enclosure to clean.
+
+        Raises:
+            ValueError: if `enclosure_id` does not exist.
+
+        Test:
+            - Given an enclosure with cleanliness=40.0, when
+              `clean_enclosure(enclosure_id)` is called, then its
+              cleanliness is 100.0, both via `get_zoo()` and in storage.
+            - Given an enclosure_id that does not exist, when
+              `clean_enclosure()` is called, then a ValueError is raised.
+        """
+        zoo = self.get_zoo()
+        enclosure = next((e for e in zoo.enclosures if e.id == enclosure_id), None)
+        if enclosure is None:
+            raise ValueError(f"Enclosure {enclosure_id} not found.")
+        enclosure.clean()
+        self._enclosure_repository.update(enclosure)
+
     def sell_ticket(self, price: float) -> None:
         """Sell one visitor ticket, if the zoo has not reached capacity.
 

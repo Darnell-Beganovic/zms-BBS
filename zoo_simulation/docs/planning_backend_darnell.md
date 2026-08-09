@@ -48,6 +48,8 @@ classDiagram
         +show_status() dict
         +add_animal(data: dict) dict
         +feed_animal(animal_id: int, food_id: int) dict
+        +hire_employee(data: dict) dict
+        +clean_enclosure(enclosure_id: int) dict
         +sell_ticket(price: float) dict
         +run_simulation_step() dict
         +create_report(format: Optional[str]) dict
@@ -65,6 +67,7 @@ classDiagram
         +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
         +hire_employee(employee: Employee) void
+        +clean_enclosure(enclosure_id: int) void
         +sell_ticket(price: float) void
     }
 
@@ -528,6 +531,43 @@ level test, since each one only exercised a single method in isolation):
   `environment.temperature` each tick, so every enclosure tracks the
   current `EnvironmentalFactor` (deliberately simple: no per-habitat
   climate control, every enclosure shows the same outdoor temperature).
+
+### 2.9 ZooController.hire_employee()/clean_enclosure() (agreed 2026-08-09)
+
+Found by manual testing of the running app: there was no way to
+interact with Employees or manually clean an Enclosure at all - not a
+bug relative to the original diagram, since it never included such
+methods on `ZooController`, but a real capability gap once the app is
+actually used (`Enclosure.clean()`/`Zookeeper.clean_enclosure()`
+existed in the domain model, and `ZooService.hire_employee()` already
+existed too, but nothing above them was ever reachable, and the
+bootstrap seed hired no one either).
+
+Added:
+
+- `ZooService.clean_enclosure(enclosure_id: int) void` (new - the
+  domain/service layer had no manual-cleaning entry point at all): finds
+  the enclosure in the cached `Zoo`, calls `Enclosure.clean()`, persists
+  via `EnclosureRepository.update()`.
+- `ZooController.hire_employee(data: dict) dict` (new): builds the
+  correct concrete `Employee` subclass from `data["role"]`/`data["name"]`/
+  `data["salary"]`, delegates to `ZooService.hire_employee()` (already
+  existed, was simply never called from above).
+- `ZooController.clean_enclosure(enclosure_id: int) dict` (new):
+  delegates to the new `ZooService.clean_enclosure()`.
+- `ZooController.show_status()`'s `data` gains an `employees` key (list
+  of `{"id", "name", "role", "salary"}`) so the frontend can display who
+  is employed - not part of `controller_stub.py`'s original contract,
+  a pure addition.
+- The bootstrap seed (`_seed_initial_zoo()`) now also hires one
+  Zookeeper/Veterinarian/Administrator, so there is someone to see/
+  interact with from the start.
+
+Kept deliberately minimal: no `fire_employee()`, no assigning a
+specific employee to a specific task (e.g. "this Zookeeper cleans this
+Enclosure") - `clean_enclosure()` is a generic action not attributed to
+an individual employee, matching the scope of what was actually asked
+for.
 
 ## 3. OOP Principles Applied in the Backend
 

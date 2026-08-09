@@ -17,11 +17,15 @@ from zoo_simulation.domain.animals.penguin import Penguin
 from zoo_simulation.domain.behaviors.feeding_behavior import FeedingBehavior
 from zoo_simulation.domain.behaviors.rest_behavior import RestBehavior
 from zoo_simulation.domain.behaviors.social_behavior import SocialBehavior
+from zoo_simulation.domain.employees.administrator import Administrator
+from zoo_simulation.domain.employees.veterinarian import Veterinarian
+from zoo_simulation.domain.employees.zookeeper import Zookeeper
 from zoo_simulation.domain.food_item import FoodItem
 
 if TYPE_CHECKING:
     from zoo_simulation.database.database_connection import DatabaseConnection
     from zoo_simulation.domain.behaviors.behavior import Behavior
+    from zoo_simulation.repositories.interfaces.employee_repository import EmployeeRepository
     from zoo_simulation.repositories.interfaces.enclosure_repository import EnclosureRepository
     from zoo_simulation.repositories.interfaces.inventory_repository import InventoryRepository
     from zoo_simulation.services.simulation_service import SimulationService
@@ -42,6 +46,8 @@ _DEFAULT_SOCIAL_LEVEL = 50
 
 _SPECIES_TO_CLASS = {"Lion": Lion, "Giraffe": Giraffe, "Penguin": Penguin}
 _DEFAULT_FOOD_PREFERENCE = {"Lion": "meat", "Giraffe": "leaves", "Penguin": "fish"}
+
+_ROLE_TO_CLASS = {"Zookeeper": Zookeeper, "Veterinarian": Veterinarian, "Administrator": Administrator}
 
 _CSV_MIMETYPE = "text/csv"
 _XLSX_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -83,6 +89,15 @@ _SEED_FOOD_ITEMS = (
     {"name": "Heu", "food_type": "hay", "quantity": 100.0, "price_per_unit": 3.0, "minimum_quantity": 10.0},
     {"name": "Fleisch", "food_type": "meat", "quantity": 100.0, "price_per_unit": 8.0, "minimum_quantity": 10.0},
     {"name": "Fisch", "food_type": "fish", "quantity": 100.0, "price_per_unit": 5.0, "minimum_quantity": 10.0},
+)
+
+# One employee per role, so there is someone to see/interact with from
+# the start (added 2026-08-09 alongside hire_employee()/
+# clean_enclosure() - see planning_backend_darnell.md section 2.9).
+_SEED_EMPLOYEES = (
+    {"role": "Zookeeper", "name": "Alex Meier", "salary": 2200.0},
+    {"role": "Veterinarian", "name": "Sam Voss", "salary": 2600.0},
+    {"role": "Administrator", "name": "Jamie Fox", "salary": 2800.0},
 )
 
 
@@ -148,8 +163,9 @@ def _seed_initial_zoo(
     connection: DatabaseConnection,
     enclosure_repository: EnclosureRepository,
     inventory_repository: InventoryRepository,
+    employee_repository: EmployeeRepository,
 ) -> int:
-    """Create a first zoo (with one enclosure per known habitat and a stocked inventory) on an empty database.
+    """Create a first zoo (enclosures, a stocked inventory, starter staff) on an empty database.
 
     Uses a direct `connection.execute()` for the `zoo` row itself rather
     than `ZooRepository.save(zoo)`: constructing a `Zoo` domain object
@@ -167,6 +183,12 @@ def _seed_initial_zoo(
             seeded Enclosures (see `_SEED_ENCLOSURES`).
         inventory_repository (InventoryRepository): used to create the
             Inventory row and stock it with starter FoodItems.
+        employee_repository (EmployeeRepository): used to save the
+            seeded Employees (see `_SEED_EMPLOYEES`). The seeded
+            Administrator's `FinanceManager` is a throwaway instance
+            (`EmployeeRepository.save()` only persists `name`/`salary`/
+            `employee_type` - see that interface's docstring) - it plays
+            no functional role after this call.
 
     Returns:
         int: the new zoo's id.
@@ -174,7 +196,7 @@ def _seed_initial_zoo(
     Test:
         - Given an empty database, when `_seed_initial_zoo()` is called,
           then it returns a positive int and that zoo has exactly 3
-          Enclosures (one per `_SEED_ENCLOSURES` entry) and 3 FoodItems
+          Enclosures, 3 FoodItems and 3 Employees (one per role)
           afterward.
         - Given `_seed_initial_zoo()` was already called once, when
           called again, then a second, independent zoo is created (no
@@ -182,6 +204,7 @@ def _seed_initial_zoo(
           job, which only calls this when no zoo exists yet).
     """
     from zoo_simulation.domain.enclosure import Enclosure
+    from zoo_simulation.domain.finance_manager import FinanceManager
 
     cursor = connection.execute(
         "INSERT INTO zoo (name, location, current_visitors, maximum_visitors) VALUES (?, ?, ?, ?)",
@@ -196,6 +219,15 @@ def _seed_initial_zoo(
     inventory_id = inventory_repository.create_inventory(zoo_id)
     for item_kwargs in _SEED_FOOD_ITEMS:
         inventory_repository.save_item(FoodItem(**item_kwargs), inventory_id)
+
+    for employee_kwargs in _SEED_EMPLOYEES:
+        role = employee_kwargs["role"]
+        employee_class = _ROLE_TO_CLASS[role]
+        if employee_class is Administrator:
+            employee = Administrator(employee_kwargs["name"], FinanceManager(), salary=employee_kwargs["salary"])
+        else:
+            employee = employee_class(employee_kwargs["name"], salary=employee_kwargs["salary"])
+        employee_repository.save(employee, zoo_id)
 
     return zoo_id
 
@@ -258,14 +290,14 @@ def _build_default_dependencies(
     animal_repository = SQLAnimalRepository(connection)
     employee_repository = SQLEmployeeRepository(connection, finance_repository)
     zoo_repository = SQLZooRepository(
-        connection, enclosure_repository, inventory_repository, finance_repository
+        connection, enclosure_repository, inventory_repository, finance_repository, employee_repository
     )
 
     existing_zoo_row = connection.execute("SELECT zoo_id FROM zoo LIMIT 1").fetchone()
     zoo_id = (
         existing_zoo_row["zoo_id"]
         if existing_zoo_row is not None
-        else _seed_initial_zoo(connection, enclosure_repository, inventory_repository)
+        else _seed_initial_zoo(connection, enclosure_repository, inventory_repository, employee_repository)
     )
 
     zoo_service = ZooService(
@@ -369,10 +401,14 @@ class ZooController:
             enclosure with columns id/name/enclosure_type/capacity/
             cleanliness/temperature - `cleanliness` converted from the
             domain's 0-100 scale to the frontend's established 0-1
-            fraction), `simulation_time` (int), `balance` (float) and
+            fraction), `simulation_time` (int), `balance` (float),
             `food_catalog` (list of `{"id", "name", "price_per_unit"}`,
             built from the zoo's Inventory FoodItems, ignoring any
-            Medications it also holds).
+            Medications it also holds) and `employees` (list of
+            `{"id", "name", "role", "salary"}`, added 2026-08-09
+            alongside `hire_employee()`/`clean_enclosure()` - not part
+            of `controller_stub.py`'s original contract, a pure
+            addition).
 
         Test:
             - Given a zoo with 1 enclosure and 2 animals, when
@@ -418,6 +454,10 @@ class ZooController:
             for item in zoo.inventory.items
             if isinstance(item, FoodItem)
         ]
+        employees = [
+            {"id": employee.id, "name": employee.name, "role": type(employee).__name__, "salary": employee.salary}
+            for employee in zoo.employees
+        ]
 
         return {
             "success": True,
@@ -435,6 +475,7 @@ class ZooController:
                 "simulation_time": self._simulation_service.get_simulation_time(),
                 "balance": zoo.finance_manager.get_balance(),
                 "food_catalog": food_catalog,
+                "employees": employees,
             },
         }
 
@@ -550,6 +591,91 @@ class ZooController:
         except ValueError as exc:
             return {"success": False, "message": str(exc), "data": None}
         return {"success": True, "message": "Ticket sold.", "data": None}
+
+    def hire_employee(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Hire a new employee from frontend-supplied request data.
+
+        Added 2026-08-09: not part of the original `ZooController`
+        diagram, which had no employee-management entry point at all -
+        `ZooService.hire_employee()` already existed but nothing above
+        it ever called it (see `planning_backend_darnell.md` section
+        2.9 for the full rationale).
+
+        Args:
+            data (dict): expected keys `"role"` ("Zookeeper"/
+                "Veterinarian"/"Administrator"), `"name"` (str).
+                Optional: `"salary"` (defaults to 0.0). Shape validation
+                is Flask's responsibility - this method validates domain
+                rules only (role known).
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": dict | None}`.
+            On success, `data` contains `name`/`role`/`salary`.
+
+        Test:
+            - Given data={"role": "Zookeeper", "name": "Alex", "salary":
+              2000.0}, when `hire_employee(data)` is called, then
+              `success` is True and the employee is persisted via
+              `ZooService.hire_employee()`.
+            - Given data with an unknown role (e.g. "Cleaner"), when
+              `hire_employee(data)` is called, then `success` is False
+              and nothing is persisted.
+        """
+        try:
+            role = data["role"]
+            employee_class = _ROLE_TO_CLASS.get(role)
+            if employee_class is None:
+                raise ValueError(f"Unknown role: {role!r}")
+
+            name = data["name"]
+            salary = float(data.get("salary", 0.0))
+
+            if employee_class is Administrator:
+                finance_manager = self._zoo_service.get_zoo().finance_manager
+                employee = Administrator(name, finance_manager, salary=salary)
+            else:
+                employee = employee_class(name, salary=salary)
+
+            self._zoo_service.hire_employee(employee)
+        except KeyError as exc:
+            return {"success": False, "message": f"Missing required field: {exc}", "data": None}
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+
+        return {
+            "success": True,
+            "message": f"{name} was hired as {role}.",
+            "data": {"name": name, "role": role, "salary": salary},
+        }
+
+    def clean_enclosure(self, enclosure_id: int) -> dict[str, Any]:
+        """Clean a stored enclosure, resetting its cleanliness to maximum.
+
+        Added 2026-08-09: not part of the original `ZooController`
+        diagram - `Enclosure.clean()`/`Zookeeper.clean_enclosure()`
+        existed in the domain model, but nothing above the domain layer
+        ever called them (see `planning_backend_darnell.md` section 2.9
+        for the full rationale).
+
+        Args:
+            enclosure_id (int): id of the enclosure to clean.
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": None}`.
+
+        Test:
+            - Given an existing enclosure, when
+              `clean_enclosure(enclosure_id)` is called, then `success`
+              is True and that enclosure's cleanliness is reset to
+              maximum.
+            - Given an enclosure_id that does not exist, when
+              `clean_enclosure()` is called, then `success` is False.
+        """
+        try:
+            self._zoo_service.clean_enclosure(int(enclosure_id))
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": "Enclosure cleaned.", "data": None}
 
     def run_simulation_step(self) -> dict[str, Any]:
         """Advance the simulation by one tick.
