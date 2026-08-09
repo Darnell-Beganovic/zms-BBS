@@ -424,6 +424,41 @@ class SQLInventoryRepository(InventoryRepository):
 
         return inventory
 
+    def create_inventory(self, zoo_id: int) -> int:
+        """Insert the (empty) `inventory` row for a zoo that does not have one yet.
+
+        Added 2026-08-09 (Darnell Beganovic, Backend focus) while wiring
+        the application entry point: a brand-new Zoo has no FoodItem/
+        Medication rows to save yet, so `save_item()`/`save_medication()`
+        (which both require an existing `inventory_id`) could never be
+        the thing that first creates the `inventory` row.
+
+        Args:
+            zoo_id (int): id of the Zoo to create an Inventory for.
+
+        Test:
+            - Given a zoo_id with no existing `inventory` row, when
+              `create_inventory(zoo_id)` is called, then it returns a
+              positive int and `get_inventory(zoo_id)` afterwards returns
+              an empty Inventory instead of None.
+            - Given a zoo_id that already has an `inventory` row, when
+              `create_inventory(zoo_id)` is called again, then the
+              `inventory.zoo_id` UNIQUE constraint raises an error
+              instead of silently creating a second row.
+        """
+        try:
+            cursor = self._connection.execute(
+                "INSERT INTO inventory (zoo_id) VALUES (?)", (zoo_id,)
+            )
+            self._connection.commit()
+            return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Could not create inventory for zoo {zoo_id}: {exc}") from exc
+        except Exception:
+            self._connection.rollback()
+            raise
+
     def _row_to_food_item(self, row: sqlite3.Row) -> FoodItem:
         """Build a FoodItem domain object from one `food_item` table row.
 

@@ -23,6 +23,14 @@
     interface only exposed FoodItem/Medication item access, with no way
     to obtain an `Inventory` instance itself; see
     planning_db_kaiss.md section 6 for the full rationale.
+
+    Added 2026-08-09 (Darnell Beganovic, Backend focus, while wiring the
+    application entry point): `create_inventory(zoo_id)` - there was no
+    way to create the `inventory` table's row itself (`save_item()`/
+    `save_medication()` both require an already-existing `inventory_id`,
+    and no method inserted one). A brand-new Zoo has no FoodItem/
+    Medication rows to save yet, so nothing could ever create its
+    `inventory` row in the first place.
 """
 
 from __future__ import annotations
@@ -275,5 +283,32 @@ class InventoryRepository(ABC):
             - Given a `zoo_id` with no matching `inventory` row, when
               `get_inventory(zoo_id)` is called, then `None` is returned
               instead of raising an unhandled exception.
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def create_inventory(self, zoo_id: int) -> int:
+        """Create the (empty) `inventory` row for a zoo that does not have one yet.
+
+        Args:
+            zoo_id (int): id of the Zoo to create an Inventory for. The
+                `inventory` table's `zoo_id` column is unique, so calling
+                this twice for the same zoo_id must fail rather than
+                create a second row.
+
+        Returns:
+            int: the `inventory_id` assigned by the database
+            (`cursor.lastrowid`), for use as `save_item()`/
+            `save_medication()`'s `inventory_id` argument.
+
+        Test:
+            - Given a zoo_id with no existing `inventory` row, when
+              `create_inventory(zoo_id)` is called, then it returns a
+              positive int and `get_inventory(zoo_id)` afterwards returns
+              an empty `Inventory` instead of `None`.
+            - Given a zoo_id that already has an `inventory` row, when
+              `create_inventory(zoo_id)` is called again, then it raises
+              an error (e.g. a uniqueness-constraint violation) instead
+              of silently creating a second row for the same zoo.
         """
         raise NotImplementedError

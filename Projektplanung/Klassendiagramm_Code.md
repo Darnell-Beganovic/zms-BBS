@@ -338,6 +338,7 @@ classDiagram
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
+        +create_inventory(zoo_id: int) int
     }
 
     class FinanceRepository {
@@ -443,6 +444,7 @@ classDiagram
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
+        +create_inventory(zoo_id: int) int
     }
 
     class SQLFinanceRepository {
