@@ -15,11 +15,31 @@
  * Zoo-Spiel-Feature-Ausbau (2026-08-09) ergaenzt mit Unterstuetzung von
  * Kaiss Saleh (Datenbank-Schwerpunkt): Sprites mit `data-mood="sleeping"`
  * (siehe game.js, computeMood()) bewegen sich nicht.
+ *
+ * Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+ * Schwerpunkt), 2026-08-09 (siehe planning_backend_darnell.md Abschnitt
+ * 2.11): `computeMood()`s "sleeping"-Anzeige haengt an `animal.energy`,
+ * das serverseitig nur bei einem Simulationsschritt (manueller Klick auf
+ * "Simulationsschritt ausfuehren") aktualisiert wird - beim reinen
+ * Zuschauen ohne Klicks wuerde man ein Tier daher ggf. nie schlafen
+ * sehen. `triggerRandomNap()` versetzt deshalb rein clientseitig
+ * (kosmetisch, kein Server-Request, keine Aenderung an echten
+ * Domain-Daten) periodisch ein zufaelliges, aktuell nicht schlafendes
+ * Sprite fuer ein paar Sekunden in denselben "sleeping"-Zustand -
+ * dieselbe Anzeige/Bewegungssperre wie ein echt niedriger Energiewert,
+ * nur garantiert oefter sichtbar.
  */
 
 const STEP_INTERVAL_MS = 900;
 const MAX_STEP_PX = 40;
 const LABEL_RESERVE_PX = 14; // Platz unterhalb des Emojis fuer den Namen
+
+// Muss NICHT exakt mit game.js's MOOD_ICONS.sleeping synchron gehalten
+// werden (rein kosmetischer Nickerchen-Effekt, kein Domain-Zustand),
+// verwendet aber bewusst dasselbe 💤-Icon fuer ein konsistentes Bild.
+const NAP_ICON = "\u{1F4A4}"; // 💤
+const NAP_INTERVAL_MS = 20000;
+const NAP_DURATION_MS = 8000;
 
 /**
  * Liefert einen zufaelligen Versatz zwischen -MAX_STEP_PX und +MAX_STEP_PX.
@@ -138,6 +158,54 @@ function tick() {
 function start() {
   tick();
   setInterval(tick, STEP_INTERVAL_MS);
+  setInterval(triggerRandomNap, NAP_INTERVAL_MS);
+}
+
+/**
+ * Versetzt ein zufaelliges, aktuell nicht schlafendes Sprite fuer
+ * `NAP_DURATION_MS` in den "sleeping"-Zustand (Icon + Bewegungsstopp,
+ * siehe Modul-Docstring), dann zurueck in seinen vorherigen Zustand
+ * (echtes `sick`/`hungry`/kein Mood-Icon bleibt danach wieder sichtbar).
+ * Rein praesentations-seitig - siehe Modul-Docstring fuer den Grund.
+ *
+ * Args/Returns: keine.
+ *
+ * Test:
+ *   TC-A13: Given mindestens ein Sprite ohne `data-mood="sleeping"`
+ *     existiert im DOM, when `triggerRandomNap()` aufgerufen wird, then
+ *     hat danach genau ein Sprite `data-mood === "sleeping"` und ein
+ *     💤-Icon, und `moveSprite()` bewegt es nicht mehr.
+ *   TC-A14: Given kein Sprite im DOM (oder alle bereits schlafend),
+ *     when `triggerRandomNap()` aufgerufen wird, then passiert nichts
+ *     und es wird keine Exception geworfen.
+ */
+function triggerRandomNap() {
+  const candidates = Array.from(document.querySelectorAll(".animal-sprite")).filter(
+    (sprite) => sprite.dataset.mood !== "sleeping"
+  );
+  if (!candidates.length) {
+    return;
+  }
+  const sprite = candidates[Math.floor(Math.random() * candidates.length)];
+  const previousMood = sprite.dataset.mood || "";
+  let moodIcon = sprite.querySelector(".animal-sprite-mood");
+  const previousIconText = moodIcon ? moodIcon.textContent : null;
+  if (!moodIcon) {
+    moodIcon = document.createElement("span");
+    moodIcon.className = "animal-sprite-mood";
+    sprite.appendChild(moodIcon);
+  }
+  moodIcon.textContent = NAP_ICON;
+  sprite.dataset.mood = "sleeping";
+
+  setTimeout(() => {
+    sprite.dataset.mood = previousMood;
+    if (previousIconText !== null) {
+      moodIcon.textContent = previousIconText;
+    } else if (moodIcon.isConnected) {
+      moodIcon.remove();
+    }
+  }, NAP_DURATION_MS);
 }
 
 window.ZooAnimation = { start };

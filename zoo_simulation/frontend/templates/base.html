@@ -3,6 +3,10 @@
   sitewide sound.js/zoo_stats.js-Einbindung ergaenzt mit Unterstuetzung von
   Kaiss Saleh (Datenbank-Schwerpunkt), gemeinsam mit Alessio Bellamacina
   (Frontend-Schwerpunkt).
+
+  "Inventar"-Navigationslink ergaenzt mit Unterstuetzung von Alessio
+  Bellamacina (Frontend-Schwerpunkt), 2026-08-09 - siehe
+  templates/inventory.html und planning_backend_darnell.md Abschnitt 2.11.
 #}
 <!doctype html>
 <html lang="de">
@@ -19,6 +23,7 @@
     <nav>
       <a href="{{ url_for('zoo.index') }}">Dashboard</a>
       <a href="{{ url_for('zoo.list_animals') }}">Tiere</a>
+      <a href="{{ url_for('zoo.show_inventory') }}">Inventar</a>
       <a href="{{ url_for('zoo.financial_report') }}">Finanzbericht</a>
       <button type="button" id="sound-toggle" class="sound-toggle" aria-pressed="false" title="Sound an/aus">🔊</button>
     </nav>

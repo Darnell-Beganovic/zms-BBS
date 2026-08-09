@@ -52,8 +52,22 @@ if TYPE_CHECKING:
 # 2026-08-09"): moderates Fressverhalten, Ruheverhalten und ein neutrales
 # Sozialverhalten, unabhaengig von Spezies. Werte bewusst schlicht gehalten
 # (kein Anspruch, den exakten Zustand vor dem letzten Speichern zu treffen).
-_DEFAULT_REST_DURATION = 20
-_DEFAULT_SOCIAL_LEVEL = 50
+# Gesenkt von 20/50 auf 1/10 (Darnell Beganovic, Backend-Schwerpunkt,
+# 2026-08-09, siehe planning_backend_darnell.md Abschnitt 2.11 und
+# planning_db_kaiss.md Abschnitt 6): SimulationEngine.update_animals()
+# ruft jetzt zusaetzlich Animal.move()/sleep() pro Tick auf. Bei den
+# urspruenglichen Werten (20/50) ueberstieg RestBehavior+SocialBehaviors
+# passive Erholung (+20 bzw. +5 Energie/Tick) jeden Energieverlust durch
+# Bewegung (3-5 je nach Spezies) bei weitem, sodass Energie immer gegen
+# 100 konvergierte und nie unter die Schlaf-Schwelle sank - auch bei
+# einem gesenkten RestBehavior allein blieb SocialBehaviors eigener
+# Beitrag (+5) noch zu hoch. Bei 1/10 betraegt die kombinierte passive
+# Erholung nur noch +2 Energie/Tick, weniger als der Bewegungsaufwand
+# jeder Spezies (Giraffe am niedrigsten mit 3) - Energie sinkt jetzt
+# unter normalen Bedingungen jeden Tick tatsaechlich, bis `sleep()` sie
+# wieder deutlich anhebt.
+_DEFAULT_REST_DURATION = 1
+_DEFAULT_SOCIAL_LEVEL = 10
 
 _ANIMAL_COLUMNS = (
     "animal_id",

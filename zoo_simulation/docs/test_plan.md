@@ -54,13 +54,13 @@ block vs. total `def`s in that layer):
 
 | Layer | Files | Methods | With `Test:` | Notes |
 |---|---:|---:|---:|---|
-| `domain/` | 23 | 130 | 79 | Gap is almost entirely simple `@property` getters/setters (e.g. `Animal.name`, `Zoo.enclosures`) that return a stored value with no branching — not separately cased. Substantive methods (`_validate_value`, `adjust_health`, `feed`, `calculate_welfare`, …) are all covered. |
-| `repositories/` | 15 | 80 | 80 | 1:1 — every repository method, including private `_row_to_*` reconstruction helpers, has cases. |
-| `services/` | 4 | 17 | 17 | 1:1. |
-| `controller/` | 2 | 13 | 13 | 1:1 (includes module-level helper functions like `_default_behaviors`, not just the `ZooController` class). |
+| `domain/` | 23 | 131 | 80 | Gap is almost entirely simple `@property` getters/setters (e.g. `Animal.name`, `Zoo.enclosures`) that return a stored value with no branching — not separately cased. Substantive methods (`_validate_value`, `adjust_health`, `feed`, `calculate_welfare`, …) are all covered. |
+| `repositories/` | 15 | 84 | 84 | 1:1 — every repository method, including private `_row_to_*` reconstruction helpers, has cases. |
+| `services/` | 4 | 30 | 30 | 1:1. |
+| `controller/` | 2 | 21 | 21 | 1:1 (includes module-level helper functions like `_default_behaviors`, not just the `ZooController` class). |
 | `simulation/` | 4 | 18 | 11 | Same property-getter pattern as `domain/` (`SimulationEngine.zoo`/`.event_scheduler`/`.environment`/`.current_step`); every method that actually does something (`tick`, `update_animals`, `update_enclosures`, `process_daily_costs`, `schedule_event`, `get_due_events`, `execute_due_events`) is covered. |
-| `frontend/*.py` | 4 | 23 | 24* | *Some methods carry more than one `Test:` heading (helper + route), so the count exceeds the `def` count; 71 unique `TC-`-IDs in total. |
-| `frontend/static/js/*.js` | 6 | — | 43 blocks | 88 unique `TC-`-IDs; JS uses top-level `function` declarations rather than class methods, counted separately. |
+| `frontend/*.py` | 4 | 33 | 34* | *Some methods carry more than one `Test:` heading (helper + route), so the count exceeds the `def` count; 91 unique `TC-`-IDs in total. |
+| `frontend/static/js/*.js` | 6 | — | 45 blocks | 65 unique `TC-`-IDs; JS uses top-level `function` declarations rather than class methods, counted separately. |
 | `database/` (`schema.sql` comments + connection helpers) | 2 | 12 | 12 | 1:1. |
 
 Net: the only systematic, explainable gap is trivial property

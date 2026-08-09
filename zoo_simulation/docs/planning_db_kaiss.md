@@ -99,10 +99,12 @@ classDiagram
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +delete_item(item_id: int) void
         +save_medication(medication: Medication, inventory_id: int) int
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
+        +delete_medication(medication_id: int) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
     }
@@ -165,10 +167,12 @@ classDiagram
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +delete_item(item_id: int) void
         +save_medication(medication: Medication, inventory_id: int) int
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
+        +delete_medication(medication_id: int) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
     }
@@ -378,6 +382,18 @@ the planning document.
   `record_expense()` calls at the object-identity level; only the next
   fresh `get_balance()` read reflects everyone's changes, since that read
   always comes straight from the `transaction` table.
+  **Update (2026-08-09, see `planning_backend_darnell.md` section
+  2.11):** this stopped being harmless once `ZooService.sell_ticket()`/
+  `feed_animal()` started routing bookkeeping through `Administrator`
+  for real - a loaded Administrator's own `FinanceManager` was never
+  read from again, so real transactions silently vanished from the
+  displayed balance. Mitigated (not a schema change) via
+  `Administrator.set_finance_manager()`, called by `ZooService.
+  get_zoo()`/`hire_employee()` to point every employed Administrator at
+  the same `Zoo.finance_manager` instance within one process's cache -
+  the underlying "two DB reads build two objects" fact described above
+  is still true, this just ensures the one `ZooService` actually uses
+  per-process stays consistent.
 - **CHECK constraints (added 2026-08-09):** `schema.sql` now enforces the
   same 0-100 ranges Python already clamps for `animal.health/hunger/energy`
   and `enclosure.cleanliness`, plus non-negative checks for `animal.age`,
@@ -404,3 +420,29 @@ the planning document.
   something a single repository call does on its own. Verified with an
   explicit round-trip test (save a Zoo with an unsaved Enclosure, confirm
   `get_by_id()` raises `ValueError` as expected, not a crash).
+- **`InventoryRepository.delete_item()`/`delete_medication()` (added
+  2026-08-09, Darnell Beganovic, Backend focus, for the new Inventory
+  management tab - see `planning_backend_darnell.md` section 2.11):**
+  same kind of real, general gap as `create_inventory()` above - the
+  interface had `save_item()`/`update_item()` but no way to permanently
+  remove a stocked item, even though `Inventory.remove_item()` already
+  existed. `SQLInventoryRepository` implements both as plain `DELETE
+  FROM food_item/medication WHERE ... = ?` statements, consistent with
+  the rest of this file's CRUD style.
+- **`SQLAnimalRepository._default_behaviors()`'s `_DEFAULT_REST_DURATION`/
+  `_DEFAULT_SOCIAL_LEVEL` lowered from 20/50 to 1/10 (added 2026-08-09,
+  Darnell Beganovic, Backend focus - see `planning_backend_darnell.md`
+  section 2.11):** `SimulationEngine.update_animals()` now calls
+  `Animal.sleep()`/`move()` every tick, previously wired to nothing. At
+  20/50, `RestBehavior`+`SocialBehavior`'s combined passive per-tick
+  energy recovery (+25) always exceeded any possible energy loss from
+  movement (3-5, species-dependent), so a reconstructed Animal's energy
+  converged toward 100 and `sleep()` never actually triggered - an
+  initial fix that only lowered `_DEFAULT_REST_DURATION` to 2 still
+  left `SocialBehavior`'s own +5/tick high enough to prevent any real
+  decline, caught by an actual 40-tick simulation run, not just
+  arithmetic. At 1/10 (combined +2/tick), energy genuinely drifts down
+  under normal ticks until `sleep()` pushes it back up -
+  `zoo_controller.py`'s own `_default_behaviors()` (used for freshly
+  added animals, not reconstructed ones) was lowered to the same values
+  for consistency.

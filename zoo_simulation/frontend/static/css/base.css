@@ -212,6 +212,29 @@ textarea:focus {
   width: 8rem;
 }
 
+/* Inventar-Tab (2026-08-09) ergaenzt mit Unterstuetzung von Alessio
+   Bellamacina (Frontend-Schwerpunkt) - siehe templates/inventory.html
+   und planning_backend_darnell.md Abschnitt 2.11. */
+.inventory-row-low-stock td {
+  background: color-mix(in srgb, var(--zoo-danger, #c0392b) 15%, transparent);
+}
+
+.inventory-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.inventory-inline-form {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+.inventory-inline-form .price-input {
+  width: 5.5rem;
+}
+
 table {
   border-collapse: separate;
   border-spacing: 0;

@@ -47,11 +47,18 @@ classDiagram
         -ReportService report_service
         +show_status() dict
         +add_animal(data: dict) dict
-        +feed_animal(animal_id: int, food_id: int) dict
-        +treat_animal(animal_id: int, medication_id: int) dict
+        +remove_animal(animal_id: int) dict
+        +feed_animal(animal_id: int, food_id: int, zookeeper_id: int) dict
+        +treat_animal(animal_id: int, medication_id: int, veterinarian_id: int) dict
         +hire_employee(data: dict) dict
-        +clean_enclosure(enclosure_id: int) dict
+        +remove_employee(employee_id: int) dict
+        +clean_enclosure(enclosure_id: int, zookeeper_id: int) dict
         +sell_ticket(price: float) dict
+        +add_food_item(data: dict) dict
+        +add_medication(data: dict) dict
+        +restock_inventory_item(item_id: int, is_food: bool, amount: float) dict
+        +consume_inventory_item(item_id: int, is_food: bool, amount: float) dict
+        +remove_inventory_item(item_id: int, is_food: bool) dict
         +run_simulation_step() dict
         +create_report(format: Optional[str]) dict
     }
@@ -66,11 +73,18 @@ classDiagram
         -FinanceRepository finance_repository
         +get_zoo() Zoo
         +add_animal(animal: Animal, enclosure_id: int) int
-        +feed_animal(animal_id: int, food_id: int) void
-        +treat_animal(animal_id: int, medication_id: int) void
+        +remove_animal(animal_id: int) void
+        +feed_animal(animal_id: int, food_id: int, zookeeper_id: int) void
+        +treat_animal(animal_id: int, medication_id: int, veterinarian_id: int) void
         +hire_employee(employee: Employee) void
-        +clean_enclosure(enclosure_id: int) void
+        +remove_employee(employee_id: int) void
+        +clean_enclosure(enclosure_id: int, zookeeper_id: int) void
         +sell_ticket(price: float) void
+        +add_food_item(food_item: FoodItem) int
+        +add_medication(medication: Medication) int
+        +restock_inventory_item(item_id: int, is_food: bool, amount: float) void
+        +consume_inventory_item(item_id: int, is_food: bool, amount: float) void
+        +remove_inventory_item(item_id: int, is_food: bool) void
     }
 
     class SimulationService {
@@ -88,6 +102,7 @@ classDiagram
         -int maximum_visitors
         +add_enclosure(enclosure: Enclosure) void
         +add_employee(employee: Employee) void
+        +remove_employee(employee_id: int) void
         +register_visitor() bool
         +calculate_average_welfare() float
     }
@@ -131,8 +146,8 @@ classDiagram
     class Administrator {
         -FinanceManager finance_manager
         +perform_task() str
-        +record_income(amount: float) void
-        +record_expense(amount: float) void
+        +record_income(amount: float, description: Optional[str]) Transaction
+        +record_expense(amount: float, description: Optional[str]) Transaction
     }
 
     class Inventory {
@@ -600,6 +615,137 @@ Found by using the running app:
   `zoo_view.py` gained `POST /animals/<id>/treat`, and
   `animals_game.html`/`game.js` now enable the "Behandeln" button with a
   medication `<select>`, mirroring the existing feeding form.
+
+### 2.11 Inventory Tab, Removal, Explicit Staff Selection, Sleep/Temperature (agreed 2026-08-09)
+
+Found by auditing the codebase for domain methods that existed but were
+never called by anything above them - several genuine gaps, not stylistic
+deviations:
+
+- **Inventory management tab**: `Inventory.add_item()`/`remove_item()`/
+  `consume_item()`/`get_low_stock_items()` existed since the domain
+  model's first implementation, but only `add_item()` was ever called
+  (once, during bootstrap seeding) - `remove_item()`/`consume_item()`
+  had zero callers anywhere. Added `ZooService.add_food_item()`/
+  `add_medication()`/`restock_inventory_item()`/
+  `consume_inventory_item()`/`remove_inventory_item()` and matching
+  `ZooController` methods, plus a new `GET /inventory` page (with
+  Alessio Bellamacina, Frontend focus) listing stock with a low-stock
+  highlight (`is_low_stock()`) and forms to add/restock/consume/remove.
+  `InventoryRepository` gained `delete_item()`/`delete_medication()`
+  (Database focus interface, same kind of real gap as
+  `create_inventory()` - see that method's own docstring and
+  `planning_db_kaiss.md` section 6): there was no way to permanently
+  remove a stocked item even though the domain method already existed.
+  FoodItem/Medication ids come from two independent auto-increment
+  sequences (separate tables), so every new method takes an explicit
+  `is_food: bool` to disambiguate - the same ambiguity `feed_animal()`/
+  `treat_animal()` already avoid via `isinstance()` filtering.
+- **Remove animals/employees**: `AnimalRepository.delete()`/
+  `EmployeeRepository.delete()` existed on the Database focus's
+  original interfaces but had zero callers - there was no removal
+  entry point at all, only `add_animal()`/`hire_employee()`. Added
+  `Zoo.remove_employee(employee_id)` (missing counterpart to
+  `add_employee()`, unlike `Enclosure` which already had both
+  `add_animal()`/`remove_animal()`) and `ZooService`/`ZooController`
+  `remove_animal()`/`remove_employee()`. This supersedes section 2.9's
+  "no `fire_employee()`" scope note - firing employees is now
+  supported, and cleaning/feeding/treating a specific enclosure/animal
+  gracefully disables in the UI (with Alessio Bellamacina) if the last
+  matching employee was just removed, instead of crashing.
+- **Explicit staff selection for feed/clean/treat**: `Zookeeper.
+  feed_animal()`/`clean_enclosure()` and `Veterinarian.treat_animal()`
+  existed in the domain model, but the service layer bypassed them
+  (`ZooService` called `Animal.eat()`/`Enclosure.clean()` directly, and
+  `treat_animal()` always picked "the first employed Veterinarian").
+  `feed_animal()`/`clean_enclosure()`/`treat_animal()` now all take an
+  explicit `zookeeper_id`/`veterinarian_id` and delegate through that
+  specific employee, and the frontend (with Alessio Bellamacina) adds a
+  matching `<select>` to each form. The "alle hungrigen füttern"
+  quick-actions deliberately do NOT prompt per animal - they use
+  whichever Zookeeper was last selected in the popup, defaulting to the
+  first employed one (client-side only, `game.js`'s `lastZookeeperId`).
+- **Income/expense routed through Administrator, no workarounds**:
+  `sell_ticket()`/`feed_animal()`'s cost booking previously called
+  `zoo.finance_manager.record_income()/record_expense()` directly,
+  bypassing `Administrator` entirely despite `Administrator -->
+  FinanceManager : manages` in the class diagram - `Administrator.
+  record_income()`/`record_expense()` existed but had zero callers.
+  Both methods now accept an optional `description` and return the
+  created `Transaction` (previously void with a hardcoded description),
+  matching `FinanceManager`'s own signature, and `ZooService` routes
+  through the zoo's employed `Administrator` via two new private
+  helpers (`_record_income()`/`_record_expense()`). Explicit product
+  decision: if no Administrator is employed, `sell_ticket()`/
+  `feed_animal()` (when the food has a positive price) raise
+  `ValueError` rather than silently falling back to `FinanceManager`
+  directly - "keine Workarounds". This check runs before any mutation,
+  so a rejected action leaves state completely unchanged.
+  `SimulationEngine.process_daily_costs()` is the one deliberate
+  exception: it also now prefers routing through an employed
+  Administrator, but falls back to `FinanceManager` directly if none is
+  employed instead of raising, because it runs unconditionally inside
+  `tick()`, which `ZooController.run_simulation_step()` calls with no
+  try/except - firing the last Administrator must never turn every
+  subsequent "Simulationsschritt ausführen" click into a server error.
+- **Animals actually sleep sometimes**: `Animal.sleep()`/`move()`
+  existed on every concrete species since the domain model's first
+  implementation but were never called automatically - only
+  `RestBehavior`/`SocialBehavior` (part of the composed Behavior set,
+  applied every tick via `Animal.update()`) affected energy, and their
+  defaults (`rest_duration=20`, `social_level=50`, i.e. +20/+5 =
+  +25 energy/tick combined) always outpaced any possible energy loss
+  from movement (3-5/tick depending on species), so energy converged
+  toward 100 and never dropped low enough for the frontend's
+  already-existing "sleeping" mood indicator (`static/js/game.js`'s
+  `computeMood()`, energy < 20, 💤 icon, `animation.js`'s
+  `moveSprite()` already skips movement for it) to ever actually
+  appear. `SimulationEngine.update_animals()` now calls `sleep()` when
+  energy drops below `_SLEEP_ENERGY_THRESHOLD = 20` (matching that same
+  frontend constant) and `move()` otherwise, and the defaults were
+  lowered to `rest_duration=1`/`social_level=10` (combined +2/tick, less
+  than every species' move cost - verified with an actual 40-tick
+  simulation run, not just arithmetic) in both `zoo_controller.py`'s
+  and `sqlite_animal_repository.py`'s (Database focus, Kaiss - see
+  `planning_db_kaiss.md` section 6) default-Behavior builders, so
+  energy now genuinely drifts down under normal ticks until `sleep()`
+  pushes it back up - a real wake/sleep cycle instead of a one-way climb
+  to 100. Additionally, since simulation ticks only advance on a manual
+  "Simulationsschritt ausführen" click, a purely presentational,
+  client-only "nap" timer was added to `animation.js`
+  (`triggerRandomNap()`, with Alessio Bellamacina) that periodically
+  puts a random sprite into the same "sleeping" state for a few
+  seconds, independent of real energy - guarantees the sleeping
+  animation is visibly demonstrable within a short real-time window
+  without depending on how many simulation steps the user has run.
+- **Per-enclosure temperature ranges**: `SimulationEngine.
+  update_enclosures()` previously set every enclosure's temperature to
+  the exact same `EnvironmentalFactor.temperature`, making a Polar
+  enclosure report the same reading as a Savanna one. Replaced with a
+  `_ENCLOSURE_TEMPERATURE_RANGES` map keyed by `enclosure_type`
+  (mirroring `_SEED_ENCLOSURES`/`static/js/game.js`'s
+  `SPECIES_HABITATS` as the same kind of frontend/backend "single
+  source of truth" already used elsewhere in this file) - each
+  enclosure's temperature now takes a small bounded random step within
+  its own type's range every tick, rounded to 1 decimal place since
+  both `index.html` and `animals_game.html` print it directly.
+- **Administrator's FinanceManager identity bug (found while verifying
+  the above via a real SQLite database)**: `planning_db_kaiss.md`
+  section 6 already documented that a reconstructed Administrator gets
+  its own fresh `FinanceManager` (equal starting balance, not the same
+  object as `Zoo.finance_manager`) as an accepted limitation - accepted
+  specifically because nothing routed real transactions through
+  `Administrator` yet. Once `sell_ticket()`/`feed_animal()` started
+  doing exactly that, this became a real bug: income/expenses were
+  recorded on a throwaway object nobody ever read balance from again,
+  so the zoo's displayed balance silently never changed. Fixed by
+  adding `Administrator.set_finance_manager()` and calling it from
+  `ZooService.get_zoo()` (once per cache-fill, for every employed
+  Administrator) and `hire_employee()` (for a newly hired
+  Administrator, which loads after the cache-fill already ran) -
+  every Administrator in the cached Zoo's employee list now shares the
+  exact same `FinanceManager` instance the Zoo itself reports balance
+  from.
 
 ## 3. OOP Principles Applied in the Backend
 
