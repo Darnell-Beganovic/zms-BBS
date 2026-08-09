@@ -54,6 +54,7 @@ classDiagram
     }
 
     class ZooService {
+        -int zoo_id
         -ZooRepository zoo_repository
         -AnimalRepository animal_repository
         -EnclosureRepository enclosure_repository
@@ -397,6 +398,33 @@ Two implementation-driven adjustments, made while implementing Sprint 3
   delegate to. `Zoo` remains the sole owner of the one `FinanceManager`
   instance (`Zoo *-- "1" FinanceManager`); `Administrator` only holds a
   reference to it, it does not own a second one.
+
+### 2.4 ZooService.zoo_id and EnvironmentalFactor Usage (agreed 2026-08-09)
+
+Two implementation-driven additions from Sprint 6 (`ZooService`,
+`SimulationService`, `ZooController`) and Sprint 5 (`SimulationEngine`):
+
+- `ZooService` gained a private `-int zoo_id` attribute, constructor-
+  injected. `get_zoo() Zoo` takes no parameters, so `ZooService` must
+  already know *which* zoo it manages - this matches the single-zoo
+  scoping assumption already documented in `planning_db_kaiss.md`
+  (`SQLZooRepository`/`SQLEmployeeRepository` likewise assume exactly
+  one zoo row). `zoo_id` is fixed for the service's lifetime, not passed
+  per call.
+- `SimulationEngine`'s `-EnvironmentalFactor environment` attribute was
+  present in the diagram from the start, but no method signature ever
+  used it explicitly (`Animal.update()`/`Behavior.execute(animal)` take
+  no environment parameter, see section 2.2). `update_animals()` now
+  applies `EnvironmentalFactor.get_influence_factor()` as a small extra
+  energy penalty on every animal, scaled by how unfavorable current
+  conditions are (e.g. a storm at night costs a bit more energy than a
+  sunny day) - on top of, not instead of, each animal's own Behaviors.
+  This is the one place `environment` is actually used, fulfilling the
+  `SimulationEngine --> EnvironmentalFactor : uses` relationship
+  functionally rather than leaving `environment` a structurally-present
+  but unused attribute. Kept deliberately simple: one scaled penalty, no
+  per-species variation, no other interaction with Behavior/Animal
+  internals.
 
 ## 3. OOP Principles Applied in the Backend
 

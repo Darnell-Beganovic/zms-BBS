@@ -40,6 +40,7 @@ classDiagram
     %% =========================
 
     class ZooService {
+        -int zoo_id
         -ZooRepository zoo_repository
         -AnimalRepository animal_repository
         -EnclosureRepository enclosure_repository
