@@ -30,6 +30,8 @@ classDiagram
         +show_status() dict
         +add_animal(data: dict) dict
         +feed_animal(animal_id: int, food_id: int) dict
+        +hire_employee(data: dict) dict
+        +clean_enclosure(enclosure_id: int) dict
         +sell_ticket(price: float) dict
         +run_simulation_step() dict
         +create_report(format: str) dict
@@ -51,6 +53,7 @@ classDiagram
         +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
         +hire_employee(employee: Employee) void
+        +clean_enclosure(enclosure_id: int) void
         +sell_ticket(price: float) void
     }
 
@@ -384,6 +387,7 @@ classDiagram
         -EnclosureRepository enclosure_repository
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
+        -EmployeeRepository employee_repository
         +save(zoo: Zoo) int
         +get_by_id(zoo_id: int) Zoo
         +update(zoo: Zoo) void
@@ -552,5 +556,6 @@ classDiagram
     SQLZooRepository --> EnclosureRepository : loads Enclosures
     SQLZooRepository --> InventoryRepository : loads Inventory
     SQLZooRepository --> FinanceRepository : loads balance
+    SQLZooRepository --> EmployeeRepository : loads Employees
     SQLEmployeeRepository --> FinanceRepository : builds Administrator's FinanceManager
 ```

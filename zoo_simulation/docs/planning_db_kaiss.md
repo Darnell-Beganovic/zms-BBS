@@ -120,6 +120,7 @@ classDiagram
         -EnclosureRepository enclosure_repository
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
+        -EmployeeRepository employee_repository
         +save(zoo: Zoo) int
         +get_by_id(zoo_id: int) Zoo
         +update(zoo: Zoo) void
@@ -209,6 +210,7 @@ classDiagram
     SQLZooRepository --> EnclosureRepository : loads Enclosures
     SQLZooRepository --> InventoryRepository : loads Inventory
     SQLZooRepository --> FinanceRepository : loads balance
+    SQLZooRepository --> EmployeeRepository : loads Employees
     SQLEmployeeRepository --> FinanceRepository : builds Administrator's FinanceManager
 
     ReportService --> AnimalRepository
@@ -262,6 +264,14 @@ columns on their own table. Fixed by:
   `FinanceManager(balance=...)` only when reconstructing an
   `Administrator` row - see §6 for why this is a new object, not
   literally the same one another loaded `Zoo` owns.
+- `SQLZooRepository` now also takes an `EmployeeRepository` dependency
+  (added to the diagram above), added 2026-08-09 by Darnell Beganovic
+  (Backend focus) while wiring the application entry point: `_row_to_zoo()`
+  wired Enclosure/Inventory/Finance but missed `Zoo o-- "0..*" Employee`
+  entirely, so every reconstructed `Zoo` had an empty `.employees` list
+  regardless of what the `employee` table held - not a `TypeError` like
+  the others, so it went unnoticed until actually seeding and then
+  reloading employees through the wired-up app.
 
 See §6 for the underlying assumptions these fixes rely on.
 
