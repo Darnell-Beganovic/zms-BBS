@@ -19,6 +19,12 @@
  * adoptieren"-Modal mit Lebensraum-/Fortschritts-Filterung, Zufallsname-
  * Button und Spotlight-Hervorhebung. Die HUD-Wohlfuehl-Score-Berechnung
  * lebt inzwischen in static/js/zoo_stats.js (sitewide, nicht nur hier).
+ *
+ * Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+ * Schwerpunkt), 2026-08-09: `openAnimalPopup()` setzt jetzt zusaetzlich
+ * die action-URL des Behandlungsformulars (verdrahtet
+ * ZooController.treat_animal(), siehe planning_backend_darnell.md
+ * Abschnitt 2.10).
  */
 
 const SPECIES_EMOJI = {
@@ -226,6 +232,11 @@ function createSprite(animal) {
  *   TC-J06: Given das Popup ist aktuell versteckt (Klasse "hidden"), when
  *     `openAnimalPopup(animal)` aufgerufen wird, then wird die Klasse
  *     "hidden" entfernt.
+ *   TC-J13 (ergaenzt mit Unterstuetzung von Alessio Bellamacina,
+ *     Frontend-Schwerpunkt, 2026-08-09): Given ein Tier mit id=3, when
+ *     `openAnimalPopup(animal)` aufgerufen wird, then zeigt das
+ *     Behandlungsformular im Popup als action-Attribut die URL
+ *     "/animals/3/treat".
  */
 function openAnimalPopup(animal) {
   document.getElementById("animal-popup-name").textContent = animal.name;
@@ -237,6 +248,9 @@ function openAnimalPopup(animal) {
 
   const feedForm = document.getElementById("animal-popup-feed-form");
   feedForm.action = `/animals/${animal.id}/feed`;
+
+  const treatForm = document.getElementById("animal-popup-treat-form");
+  treatForm.action = `/animals/${animal.id}/treat`;
 
   document.getElementById("animal-popup").classList.remove("hidden");
   if (window.ZooSound) {

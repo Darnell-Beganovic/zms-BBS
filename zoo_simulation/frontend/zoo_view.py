@@ -87,6 +87,14 @@ erstmals `ZooController.hire_employee(data)`/`clean_enclosure(enclosure_id)`
 reichen zusaetzlich `employees`/`known_roles` an `index.html` durch, das
 jetzt ein Mitarbeiter-Panel (Liste + Einstellen-Formular) sowie einen
 "Reinigen"-Knopf je Gehege zeigt.
+
+Fuenfte Ausbaustufe (2026-08-09, Tierarzt-Behandlung, mit Unterstuetzung von
+Alessio Bellamacina, Frontend-Schwerpunkt): neue Route
+`POST /animals/<id>/treat` verdrahtet die neu implementierte
+`ZooController.treat_animal(animal_id, medication_id)` (siehe
+`planning_backend_darnell.md` Abschnitt 2.10) mit dem zuvor deaktivierten
+"Behandeln"-Button in `animals_game.html`. `show_animals()` reicht dazu
+zusaetzlich `medication_catalog` durch, analog zu `food_catalog`.
 """
 
 from __future__ import annotations
@@ -394,6 +402,7 @@ def show_animals(
     """
     animals = status_data["animals"].to_dict(orient="records")
     food_catalog = status_data.get("food_catalog", [])
+    medication_catalog = status_data.get("medication_catalog", [])
 
     if view == "list":
         return render_template("animals.html", animals=animals, food_catalog=food_catalog)
@@ -414,6 +423,7 @@ def show_animals(
         known_species=_KNOWN_SPECIES,
         highlight_animal_id=highlight_animal_id,
         food_catalog=food_catalog,
+        medication_catalog=medication_catalog,
     )
 
 
@@ -476,6 +486,44 @@ def handle_feed_animal_form(animal_id: int):
         return list_animals(), 400
 
     result = _controller.feed_animal(animal_id, int(food_id_raw))
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.list_animals"))
+
+
+@zoo_bp.route("/animals/<int:animal_id>/treat", methods=["POST"])
+def handle_treat_animal_form(animal_id: int):
+    """Route `POST /animals/<id>/treat`: verarbeitet das Behandlungsformular.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09: verdrahtet die neu implementierte
+    `ZooController.treat_animal(animal_id, medication_id)` (siehe
+    `planning_backend_darnell.md` Abschnitt 2.10) mit dem zuvor
+    deaktivierten "Behandeln"-Button in `animals_game.html`. Struktur und
+    Validierungstiefe sind bewusst identisch zu
+    `handle_feed_animal_form()` gehalten (nur oberflaechliche
+    Formularpruefung, Domain-Regeln entscheidet der Controller).
+
+    Args:
+        animal_id (int): ID des zu behandelnden Tieres, aus der URL.
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger `medication_id` ein
+        gerenderter Fehlerzustand der Tierliste mit Status 400, ohne dass
+        `ZooController.treat_animal()` aufgerufen wird. Bei gueltiger
+        Eingabe ein Redirect (Status 302) zurueck auf `/animals` nach dem
+        Post/Redirect/Get-Muster, mit der Erfolgs-/Fehlermeldung von
+        `ZooController.treat_animal()` als Flash-Message.
+    """
+    medication_id_raw = request.form.get("medication_id", "").strip()
+
+    if not medication_id_raw or not medication_id_raw.isdigit() or int(medication_id_raw) <= 0:
+        show_message(
+            "Bitte eine gueltige Medikament-ID (positive Ganzzahl) angeben.",
+            category="error",
+        )
+        return list_animals(), 400
+
+    result = _controller.treat_animal(animal_id, int(medication_id_raw))
     show_message(result["message"], category="success" if result["success"] else "error")
     return redirect(url_for("zoo.list_animals"))
 

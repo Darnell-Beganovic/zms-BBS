@@ -7,7 +7,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from zoo_simulation.domain.employees.veterinarian import Veterinarian
 from zoo_simulation.domain.food_item import FoodItem
+from zoo_simulation.domain.medication import Medication
 
 if TYPE_CHECKING:
     from zoo_simulation.domain.animals.animal import Animal
@@ -180,7 +182,7 @@ class ZooService:
         return new_id
 
     def feed_animal(self, animal_id: int, food_id: int) -> None:
-        """Feed a stored animal with a stored food item.
+        """Feed a stored animal with a stored food item, booking the cost as an expense.
 
         Args:
             animal_id (int): id of the animal to feed.
@@ -190,14 +192,18 @@ class ZooService:
             ValueError: if `animal_id` or `food_id` does not exist.
 
         Test:
-            - Given an animal with hunger=80 and available food, when
-              `feed_animal(animal_id, food_id)` is called, then hunger
-              decreases and the food's stored quantity decreases by the
-              expected amount, visible both via `get_zoo()` and in
-              storage.
+            - Given an animal with hunger=80 and available food with
+              price_per_unit=8.0, when `feed_animal(animal_id, food_id)`
+              is called, then hunger decreases, the food's stored
+              quantity decreases by the expected amount, and the zoo's
+              FinanceManager balance decreases by `amount_consumed *
+              price_per_unit` (added 2026-08-09 - `Animal.eat()` itself
+              has no FinanceManager access, matching its diagram; found
+              by actually using the running app, where feeding never
+              cost anything).
             - Given an animal id that does not exist, when
               `feed_animal()` is called, then a ValueError is raised and
-              no inventory change occurs.
+              no inventory/finance change occurs.
         """
         zoo = self.get_zoo()
         animal = next(
@@ -212,10 +218,70 @@ class ZooService:
         if food is None:
             raise ValueError(f"FoodItem {food_id} not found.")
 
+        quantity_before = food.quantity
         animal.eat(food)
+        amount_consumed = quantity_before - food.quantity
 
         self._animal_repository.update(animal)
         self._inventory_repository.update_item(food)
+
+        cost = amount_consumed * food.price_per_unit
+        if cost > 0:
+            transaction = zoo.finance_manager.record_expense(cost, f"Feeding cost: {animal.name} ({food.name})")
+            self._finance_repository.save_transaction(transaction, self._zoo_id)
+
+    def treat_animal(self, animal_id: int, medication_id: int) -> None:
+        """Treat a stored animal with a stored medication, via an employed Veterinarian.
+
+        Added 2026-08-09: not part of the original `ZooService` diagram
+        at all - `Veterinarian.treat_animal()` existed in the domain
+        model, but nothing above it was ever callable (the frontend's
+        "Behandeln" button was a disabled placeholder with the tooltip
+        "Tierarzt-Funktion existiert im Backend noch nicht" - see
+        `planning_backend_darnell.md` section 2.10 for the full
+        rationale). Delegates to the zoo's first employed `Veterinarian`
+        rather than adding a `veterinarian_id` parameter, matching how
+        `feed_animal()` doesn't require picking a specific `Zookeeper`
+        either.
+
+        Args:
+            animal_id (int): id of the animal to treat.
+            medication_id (int): id of the Medication to use.
+
+        Raises:
+            ValueError: if `animal_id`/`medication_id` does not exist,
+                or the zoo employs no Veterinarian.
+
+        Test:
+            - Given a sick animal (health=30), an existing Medication,
+              and an employed Veterinarian, when
+              `treat_animal(animal_id, medication_id)` is called, then
+              the animal's health increases and the medication's stored
+              quantity decreases, both persisted.
+            - Given the zoo employs no Veterinarian, when
+              `treat_animal()` is called, then a ValueError is raised
+              and nothing changes.
+        """
+        zoo = self.get_zoo()
+        animal = next(
+            (a for enclosure in zoo.enclosures for a in enclosure.animals if a.id == animal_id), None
+        )
+        if animal is None:
+            raise ValueError(f"Animal {animal_id} not found.")
+        medication = next(
+            (item for item in zoo.inventory.items if item.id == medication_id and isinstance(item, Medication)),
+            None,
+        )
+        if medication is None:
+            raise ValueError(f"Medication {medication_id} not found.")
+        veterinarian = next((e for e in zoo.employees if isinstance(e, Veterinarian)), None)
+        if veterinarian is None:
+            raise ValueError("No veterinarian employed.")
+
+        veterinarian.treat_animal(animal, medication)
+
+        self._animal_repository.update(animal)
+        self._inventory_repository.update_medication(medication)
 
     def hire_employee(self, employee: Employee) -> None:
         """Hire a new employee for the managed zoo.

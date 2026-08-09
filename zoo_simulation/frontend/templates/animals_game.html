@@ -89,11 +89,21 @@
         </select>
         <button type="submit">Füttern</button>
       </form>
-      <div class="animal-popup-placeholder-actions">
-        <button type="button" disabled title="Noch nicht verfügbar - Tierarzt-Funktion existiert im Backend noch nicht">
-          Behandeln
-        </button>
-      </div>
+      {#
+        Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+        Schwerpunkt), 2026-08-09: war zuvor ein deaktivierter Platzhalter
+        ("Tierarzt-Funktion existiert im Backend noch nicht") - jetzt
+        verdrahtet ZooController.treat_animal(), siehe
+        planning_backend_darnell.md Abschnitt 2.10.
+      #}
+      <form method="post" id="animal-popup-treat-form" class="animal-popup-feed-form" action="">
+        <select name="medication_id" required>
+          {% for medication in medication_catalog %}
+            <option value="{{ medication.id }}">{{ medication.name }}</option>
+          {% endfor %}
+        </select>
+        <button type="submit">Behandeln</button>
+      </form>
     </div>
   </div>
 
