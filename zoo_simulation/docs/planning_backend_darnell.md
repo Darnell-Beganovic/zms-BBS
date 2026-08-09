@@ -86,6 +86,21 @@ classDiagram
         +calculate_average_welfare() float
     }
 
+    class Enclosure {
+        -int id
+        -str name
+        -str enclosure_type
+        -float size
+        -int capacity
+        -float cleanliness
+        -float temperature
+        +add_animal(animal: Animal) void
+        +remove_animal(animal_id: int) void
+        +has_capacity() bool
+        +clean() void
+        +update() void
+    }
+
     class Employee {
         <<abstract>>
         -int id
@@ -108,9 +123,56 @@ classDiagram
     }
 
     class Administrator {
+        -FinanceManager finance_manager
         +perform_task() str
         +record_income(amount: float) void
         +record_expense(amount: float) void
+    }
+
+    class Inventory {
+        -int id
+        +add_item(item: FoodItem|Medication) void
+        +remove_item(item_id: int) void
+        +consume_item(item_id: int, quantity: float) bool
+        +get_low_stock_items() list
+    }
+
+    class FoodItem {
+        -int id
+        -str name
+        -str food_type
+        -float quantity
+        -float price_per_unit
+        -float minimum_quantity
+        +increase_quantity(amount: float) void
+        +decrease_quantity(amount: float) bool
+        +is_low_stock() bool
+    }
+
+    class Medication {
+        -int id
+        -str name
+        -float quantity
+        -float minimum_quantity
+        +increase_quantity(amount: float) void
+        +decrease_quantity(amount: float) bool
+        +is_low_stock() bool
+    }
+
+    class FinanceManager {
+        -float balance
+        +record_income(amount: float, description: str) Transaction
+        +record_expense(amount: float, description: str) Transaction
+        +get_balance() float
+    }
+
+    class Transaction {
+        -int id
+        -str transaction_type
+        -float amount
+        -str description
+        -datetime created_at
+        +is_valid() bool
     }
 
     class Animal {
@@ -215,6 +277,20 @@ classDiagram
 
     Zoo *-- "1..*" Enclosure : owns
     Zoo o-- "0..*" Employee : employs
+    Zoo *-- "1" Inventory : owns
+    Zoo *-- "1" FinanceManager : owns
+
+    Enclosure o-- "0..*" Animal : houses
+    Inventory *-- "0..*" FoodItem : contains
+    Inventory *-- "0..*" Medication : contains
+    FinanceManager *-- "0..*" Transaction : creates
+
+    Zookeeper ..> Animal : feeds
+    Zookeeper ..> Enclosure : cleans
+    Zookeeper ..> FoodItem : uses
+    Veterinarian ..> Animal : treats
+    Veterinarian ..> Medication : uses
+    Administrator --> FinanceManager : manages
 
     ZooController --> ZooService
     ZooController --> SimulationService
@@ -282,6 +358,45 @@ methods are additions to the class diagram versus the original
 method were likewise adopted from the full diagram (aufgabe.md
 Teilbereich 2 explicitly names "Nahrungspräferenzen" and
 "typischesVerhalten()").
+
+### 2.3 Enclosure/Inventory/FinanceManager/Transaction Added to This Diagram, Inventory and Administrator Adjustments (agreed 2026-08-06)
+
+Section 1's scope list already named `Enclosure`, `Inventory`,
+`FinanceManager` and `Transaction` as Backend-owned domain classes, but
+this document's diagram (section 2) had never actually included them -
+only the shared `Klassendiagramm_Code.md` had. Added here (with
+`FoodItem`/`Medication`, since `Inventory` composes both) so this
+Backend-focus diagram is complete for every class this document claims
+to own, per aufgabe.md's "schwerpunktspezifisches umfassendes
+Klassendiagramm" requirement.
+
+Two implementation-driven adjustments, made while implementing Sprint 3
+(`Inventory`, `FinanceManager`, `Enclosure`) and Sprint 4 (`Zookeeper`,
+`Veterinarian`, `Administrator`, `Zoo`):
+
+- `Inventory.add_item()`/`remove_item()`/`consume_item()`/
+  `get_low_stock_items()` operate on `FoodItem|Medication`, not just
+  `FoodItem`. `FoodItem` and `Medication` both expose the same
+  `id`/`increase_quantity()`/`decrease_quantity()`/`is_low_stock()`
+  interface, and aufgabe.md's own description of `Inventar` says it
+  "verwaltet verfügbare Ressourcen wie Futter... oder Medikamente" -
+  i.e. one inventory managing both kinds through one interface, matching
+  `Inventory *-- FoodItem` and `Inventory *-- Medication` both being
+  satisfied by a single mixed collection. Persistence still splits them
+  into `food_item`/`medication` tables via
+  `InventoryRepository.save_item()`/`save_medication()` - routing each
+  item to the right repository call by type is the persisting caller's
+  job (Sprint 6, `ZooService`), not `Inventory`'s.
+- `Administrator` gained a private `-FinanceManager finance_manager`
+  attribute (constructor-injected). The diagram's
+  `Administrator ..> FinanceManager : manages` dependency arrow is
+  upgraded to `Administrator --> FinanceManager : manages` (association)
+  since it is now a stored reference, not just a method-local usage:
+  without it, `record_income(amount)`/`record_expense(amount)` (which
+  take no `FinanceManager` parameter) would have no `FinanceManager` to
+  delegate to. `Zoo` remains the sole owner of the one `FinanceManager`
+  instance (`Zoo *-- "1" FinanceManager`); `Administrator` only holds a
+  reference to it, it does not own a second one.
 
 ## 3. OOP Principles Applied in the Backend
 
