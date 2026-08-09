@@ -20,7 +20,10 @@ from zoo_simulation.domain.behaviors.social_behavior import SocialBehavior
 from zoo_simulation.domain.food_item import FoodItem
 
 if TYPE_CHECKING:
+    from zoo_simulation.database.database_connection import DatabaseConnection
     from zoo_simulation.domain.behaviors.behavior import Behavior
+    from zoo_simulation.repositories.interfaces.enclosure_repository import EnclosureRepository
+    from zoo_simulation.repositories.interfaces.inventory_repository import InventoryRepository
     from zoo_simulation.services.simulation_service import SimulationService
     from zoo_simulation.services.zoo_service import ZooService
 
@@ -51,6 +54,28 @@ _XLSX_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sh
 # rather than changing Enclosure's own internal scale.
 _CLEANLINESS_FRACTION_DIVISOR = 100.0
 
+# Default self-wiring for a zero-argument ZooController() (see __init__
+# and _build_default_dependencies() below) - used when no explicit
+# zoo/simulation/report service is supplied, e.g. by
+# zoo_view.py's `_controller = ZooController()`.
+_DEFAULT_DATABASE_PATH = str(Path(__file__).resolve().parents[1] / "database" / "zoo.db")
+_SCHEMA_PATH = Path(__file__).resolve().parents[1] / "database" / "schema.sql"
+
+_DEFAULT_ZOO_NAME = "Musterzoo"
+_DEFAULT_ZOO_LOCATION = "Berlin"
+_DEFAULT_MAXIMUM_VISITORS = 50
+_DEFAULT_ENCLOSURE_KWARGS = {
+    "name": "Savannah",
+    "enclosure_type": "savannah",
+    "size": 200.0,
+    "capacity": 10,
+}
+_SEED_FOOD_ITEMS = (
+    {"name": "Heu", "food_type": "hay", "quantity": 100.0, "price_per_unit": 3.0, "minimum_quantity": 10.0},
+    {"name": "Fleisch", "food_type": "meat", "quantity": 100.0, "price_per_unit": 8.0, "minimum_quantity": 10.0},
+    {"name": "Fisch", "food_type": "fish", "quantity": 100.0, "price_per_unit": 5.0, "minimum_quantity": 10.0},
+)
+
 
 def _default_behaviors(food_preference: str) -> list[Behavior]:
     """Build the default Behavior set for a newly added animal.
@@ -78,6 +103,177 @@ def _default_behaviors(food_preference: str) -> list[Behavior]:
     ]
 
 
+def _apply_schema(connection: DatabaseConnection) -> None:
+    """Apply `database/schema.sql` against an open connection.
+
+    Every statement is `CREATE TABLE IF NOT EXISTS`/`CREATE INDEX IF NOT
+    EXISTS`, so running this against an already-initialized database is
+    a safe no-op. Split naively on `;` rather than using
+    `sqlite3.Connection.executescript()` directly, since
+    `DatabaseConnection` only exposes single-statement `execute()` (see
+    `database_connection.py`) - schema.sql is fully controlled, known
+    content with no semicolons inside string literals, so this is safe
+    for this specific file.
+
+    Args:
+        connection (DatabaseConnection): an already-connected
+            DatabaseConnection to apply the schema against.
+
+    Test:
+        - Given a brand-new, empty SQLite file, when `_apply_schema()`
+          is called, then querying `sqlite_master` afterward lists the
+          `zoo`/`enclosure`/`animal`/... tables from schema.sql.
+        - Given a database schema.sql was already applied to, when
+          `_apply_schema()` is called again, then no error is raised
+          (idempotent).
+    """
+    statements = _SCHEMA_PATH.read_text(encoding="utf-8").split(";")
+    for statement in statements:
+        statement = statement.strip()
+        if statement:
+            connection.execute(statement)
+    connection.commit()
+
+
+def _seed_initial_zoo(
+    connection: DatabaseConnection,
+    enclosure_repository: EnclosureRepository,
+    inventory_repository: InventoryRepository,
+) -> int:
+    """Create a first zoo (with one enclosure and a stocked inventory) on an empty database.
+
+    Uses a direct `connection.execute()` for the `zoo` row itself rather
+    than `ZooRepository.save(zoo)`: constructing a `Zoo` domain object
+    requires already having at least one `Enclosure`/an `Inventory`/a
+    `FinanceManager` (`Zoo`'s own `1..*` composition rule), which do not
+    exist yet at this exact bootstrap moment - a chicken-and-egg problem
+    specific to this one-time seeding step, not a general repository
+    capability gap (unlike `InventoryRepository.create_inventory()`,
+    which was a real, general gap - see that module's docstring).
+
+    Args:
+        connection (DatabaseConnection): used for the one-off `zoo` row
+            insert.
+        enclosure_repository (EnclosureRepository): used to save the
+            seeded Enclosure.
+        inventory_repository (InventoryRepository): used to create the
+            Inventory row and stock it with starter FoodItems.
+
+    Returns:
+        int: the new zoo's id.
+
+    Test:
+        - Given an empty database, when `_seed_initial_zoo()` is called,
+          then it returns a positive int and that zoo has exactly one
+          Enclosure and 3 FoodItems afterward.
+        - Given `_seed_initial_zoo()` was already called once, when
+          called again, then a second, independent zoo is created (no
+          duplicate-detection here - that is `_build_default_dependencies()`'s
+          job, which only calls this when no zoo exists yet).
+    """
+    from zoo_simulation.domain.enclosure import Enclosure
+
+    cursor = connection.execute(
+        "INSERT INTO zoo (name, location, current_visitors, maximum_visitors) VALUES (?, ?, ?, ?)",
+        (_DEFAULT_ZOO_NAME, _DEFAULT_ZOO_LOCATION, 0, _DEFAULT_MAXIMUM_VISITORS),
+    )
+    connection.commit()
+    zoo_id = cursor.lastrowid
+
+    enclosure = Enclosure(**_DEFAULT_ENCLOSURE_KWARGS)
+    enclosure_repository.save(enclosure, zoo_id)
+
+    inventory_id = inventory_repository.create_inventory(zoo_id)
+    for item_kwargs in _SEED_FOOD_ITEMS:
+        inventory_repository.save_item(FoodItem(**item_kwargs), inventory_id)
+
+    return zoo_id
+
+
+def _build_default_dependencies(
+    database_path: str | None = None,
+) -> tuple[ZooService, SimulationService, ReportService]:
+    """Self-wire a full ZooService/SimulationService/ReportService against a real SQLite database.
+
+    This is the composition root for a zero-argument `ZooController()`
+    (see class docstring for why that has to be possible at all).
+    Connects to `database_path` (creating/initializing it via
+    `_apply_schema()` if needed), builds every `SQL*Repository` with its
+    required dependencies, seeds a first zoo via `_seed_initial_zoo()` if
+    none exists yet, and wires `ZooService`/`SimulationEngine`/
+    `SimulationService`/`ReportService` on top - `SimulationEngine` is
+    constructed with the exact same `Zoo` instance `ZooService` caches
+    (see `ZooService`'s docstring on why that matters).
+
+    Args:
+        database_path (str | None, optional): path to the SQLite file.
+            Defaults to `database/zoo.db` relative to this package.
+
+    Returns:
+        tuple[ZooService, SimulationService, ReportService]: ready to
+        pass straight into `ZooController.__init__()`.
+
+    Test:
+        - Given a database_path pointing to a non-existent file, when
+          `_build_default_dependencies()` is called, then the file is
+          created, a zoo is seeded, and the returned ZooService's
+          `get_zoo()` returns a Zoo with exactly one Enclosure.
+        - Given `_build_default_dependencies()` was already called once
+          for the same database_path (so a zoo already exists), when
+          called again, then it reuses the existing zoo instead of
+          seeding a second one.
+    """
+    from zoo_simulation.database.database_connection import SQLiteConnection
+    from zoo_simulation.repositories.sqlite.sqlite_animal_repository import SQLAnimalRepository
+    from zoo_simulation.repositories.sqlite.sqlite_employee_repository import SQLEmployeeRepository
+    from zoo_simulation.repositories.sqlite.sqlite_enclosure_repository import SQLEnclosureRepository
+    from zoo_simulation.repositories.sqlite.sqlite_finance_repository import SQLFinanceRepository
+    from zoo_simulation.repositories.sqlite.sqlite_inventory_repository import SQLInventoryRepository
+    from zoo_simulation.repositories.sqlite.sqlite_zoo_repository import SQLZooRepository
+    from zoo_simulation.services.report_service import ReportService
+    from zoo_simulation.services.simulation_service import SimulationService
+    from zoo_simulation.services.zoo_service import ZooService
+    from zoo_simulation.simulation.simulation_engine import SimulationEngine
+
+    path = database_path or _DEFAULT_DATABASE_PATH
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+
+    connection = SQLiteConnection(path)
+    connection.connect()
+    _apply_schema(connection)
+
+    finance_repository = SQLFinanceRepository(connection)
+    inventory_repository = SQLInventoryRepository(connection)
+    enclosure_repository = SQLEnclosureRepository(connection)
+    animal_repository = SQLAnimalRepository(connection)
+    employee_repository = SQLEmployeeRepository(connection, finance_repository)
+    zoo_repository = SQLZooRepository(
+        connection, enclosure_repository, inventory_repository, finance_repository
+    )
+
+    existing_zoo_row = connection.execute("SELECT zoo_id FROM zoo LIMIT 1").fetchone()
+    zoo_id = (
+        existing_zoo_row["zoo_id"]
+        if existing_zoo_row is not None
+        else _seed_initial_zoo(connection, enclosure_repository, inventory_repository)
+    )
+
+    zoo_service = ZooService(
+        zoo_id,
+        zoo_repository,
+        animal_repository,
+        enclosure_repository,
+        employee_repository,
+        inventory_repository,
+        finance_repository,
+    )
+    simulation_engine = SimulationEngine(zoo_service.get_zoo())
+    simulation_service = SimulationService(simulation_engine)
+    report_service = ReportService(animal_repository, finance_repository, inventory_repository)
+
+    return zoo_service, simulation_service, report_service
+
+
 class ZooController:
     """ZooController - the single entry point the Flask frontend calls into.
 
@@ -87,11 +283,21 @@ class ZooController:
     the Frontend focus, see planning_backend_darnell.md section 2.1) so
     ZooView never has to touch ZooService/domain objects directly.
 
-    Deliberately does not construct its own ZooService/
-    SimulationService/ReportService - those, and any concrete
-    repository/DatabaseConnection wiring, are assembled elsewhere (a
-    dedicated composition-root/integration step, still pending - see
-    main.py).
+    `zoo_view.py` instantiates its controller with zero arguments
+    (`_controller = ZooController()`, see that module's docstring: "Der
+    Tausch auf die echte Implementierung passiert an genau einer Stelle
+    (dem Import unten)" - swapping the `MockZooController` import for
+    this class is meant to be the *only* change needed there). Since
+    that instantiation happens at blueprint-import time, before any
+    dedicated composition-root code could run, this class supports
+    building its own dependencies when none are supplied
+    (`_build_default_dependencies()`) - a real SQLite-backed
+    ZooService/SimulationService/ReportService, self-seeded with a
+    starter zoo on first run. Explicit constructor injection (passing
+    all three services directly) remains available and is what every
+    test in this module uses - the zero-argument path exists
+    specifically for `zoo_view.py`'s constraint, not to replace normal
+    dependency injection.
 
         - Constructor: stores the three services privately.
         - _zoo_service (ZooService), _simulation_service
@@ -100,26 +306,38 @@ class ZooController:
 
     def __init__(
         self,
-        zoo_service: ZooService,
-        simulation_service: SimulationService,
-        report_service: ReportService,
+        zoo_service: ZooService | None = None,
+        simulation_service: SimulationService | None = None,
+        report_service: ReportService | None = None,
+        database_path: str | None = None,
     ) -> None:
         """Store the services this controller mediates between.
 
         Args:
-            zoo_service (ZooService): zoo management business logic.
-            simulation_service (SimulationService): simulation stepping.
-            report_service (ReportService): report generation/export
-                (Database focus).
+            zoo_service (ZooService | None, optional): zoo management
+                business logic. Defaults to None.
+            simulation_service (SimulationService | None, optional):
+                simulation stepping. Defaults to None.
+            report_service (ReportService | None, optional): report
+                generation/export (Database focus). Defaults to None.
+            database_path (str | None, optional): only used when
+                self-wiring (see class docstring) - path to the SQLite
+                file to connect to/initialize. Defaults to
+                `database/zoo.db` relative to this package. Ignored if
+                `zoo_service`/`simulation_service`/`report_service` are
+                all supplied.
 
         Test:
             - Given the three services, when ZooController is
               constructed, then every method can be called immediately
-              without further setup.
-            - Given service doubles instead of the real services, when
-              ZooController is used, then it works identically, since it
-              only calls their public methods.
+              without further setup, using exactly those instances.
+            - Given no arguments at all, when ZooController is
+              constructed, then it self-wires a real SQLite-backed
+              ZooService/SimulationService/ReportService and every
+              method can still be called immediately.
         """
+        if zoo_service is None or simulation_service is None or report_service is None:
+            zoo_service, simulation_service, report_service = _build_default_dependencies(database_path)
         self._zoo_service = zoo_service
         self._simulation_service = simulation_service
         self._report_service = report_service
@@ -248,7 +466,11 @@ class ZooController:
                 raise ValueError(f"Unknown species: {species!r}")
 
             name = data["name"]
-            enclosure_id = data["enclosure_id"]
+            # int(...) guards against e.g. a numpy.int64 sneaking in from
+            # a DataFrame-derived caller - sqlite3 silently mis-binds
+            # those, breaking FOREIGN KEY checks (found while wiring
+            # this against a real SQLite database).
+            enclosure_id = int(data["enclosure_id"])
             food_preference = data.get("food_preference", _DEFAULT_FOOD_PREFERENCE[species])
 
             kwargs: dict[str, Any] = {

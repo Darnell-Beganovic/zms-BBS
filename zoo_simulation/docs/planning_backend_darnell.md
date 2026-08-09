@@ -481,6 +481,30 @@ scope. A restarted process re-derives its `Zoo` from whatever was last
 persisted via `ZooService`'s own methods, not from any simulated tick
 effects.
 
+### 2.7 ZooController Self-Wiring for Zero-Argument Construction (agreed 2026-08-09)
+
+`zoo_view.py` (Frontend focus) instantiates its controller as
+`_controller = ZooController()` at blueprint-import time, with the
+explicit, already-documented intent that swapping the
+`MockZooController` import for the real class is the *only* change
+needed there (see that module's own docstring). Since this
+instantiation happens before any dedicated composition-root code could
+run, `ZooController.__init__()`'s `zoo_service`/`simulation_service`/
+`report_service` parameters became optional: when omitted, a new
+`_build_default_dependencies()` (in `zoo_controller.py`) connects to a
+real SQLite database (`database/zoo.db` by default), applies
+`schema.sql`, builds every `SQL*Repository`, and seeds a first zoo
+(one Enclosure, a stocked Inventory) if none exists yet.
+
+This makes `ZooController` a composition root when used this way, which
+is not the cleanest possible separation of concerns in the abstract -
+but it is the only way to fulfill the frontend's already-established,
+already-merged single-touch-point contract without modifying
+`zoo_view.py` beyond that one import line. Explicit constructor
+injection (passing all three services directly) remains fully
+supported and is what every existing test uses; the zero-argument path
+exists specifically for this integration constraint.
+
 ## 3. OOP Principles Applied in the Backend
 
 - **Abstraction**: `Employee` and `Animal` are abstract base classes; concrete
