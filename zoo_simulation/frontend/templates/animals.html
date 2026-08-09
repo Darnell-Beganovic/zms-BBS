@@ -1,3 +1,8 @@
+{#
+  Such-/Sortierleiste sowie Futterauswahl-mit-Preis (statt freier Zahl,
+  siehe controller_stub.py food_catalog) ergaenzt mit Unterstuetzung von
+  Kaiss Saleh (Datenbank-Schwerpunkt), Zoo-Spiel-Feature-Ausbau (2026-08-09).
+#}
 {% extends "base.html" %}
 
 {% block title %}Tiere – Zoo Management System{% endblock %}
@@ -9,40 +14,62 @@
   </div>
 
   {% if animals %}
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Spezies</th>
-          <th>Alter</th>
-          <th>Health</th>
-          <th>Hunger</th>
-          <th>Energy</th>
-          <th>Gehege</th>
-          <th>Füttern</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for animal in animals %}
+    <div class="panel">
+      <div class="animal-list-controls">
+        <input type="search" id="animal-search" placeholder="🔍 Suche nach Name oder Spezies…">
+        <select id="animal-sort">
+          <option value="name-asc">Sortieren: Name (A–Z)</option>
+          <option value="hunger-desc">Hunger (hoch → niedrig)</option>
+          <option value="health-asc">Health (niedrig → hoch)</option>
+          <option value="energy-asc">Energy (niedrig → hoch)</option>
+        </select>
+      </div>
+      <table>
+        <thead>
           <tr>
-            <td>{{ animal.name }}</td>
-            <td>{{ animal.species }}</td>
-            <td>{{ animal.age }}</td>
-            <td>{{ animal.health }}</td>
-            <td>{{ animal.hunger }}</td>
-            <td>{{ animal.energy }}</td>
-            <td>{{ animal.enclosure_id }}</td>
-            <td>
-              <form method="post" action="{{ url_for('zoo.handle_feed_animal_form', animal_id=animal.id) }}">
-                <input type="number" name="food_id" min="1" required placeholder="Futter-ID" class="food-id-input">
-                <button type="submit">Füttern</button>
-              </form>
-            </td>
+            <th>Name</th>
+            <th>Spezies</th>
+            <th>Alter</th>
+            <th>Health</th>
+            <th>Hunger</th>
+            <th>Energy</th>
+            <th>Gehege</th>
+            <th>Füttern</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+        </thead>
+        <tbody id="animal-table-body">
+          {% for animal in animals %}
+            <tr data-name="{{ animal.name }}" data-species="{{ animal.species }}"
+                data-health="{{ animal.health }}" data-hunger="{{ animal.hunger }}"
+                data-energy="{{ animal.energy }}">
+              <td>{{ animal.name }}</td>
+              <td>{{ animal.species }}</td>
+              <td>{{ animal.age }}</td>
+              <td>{{ animal.health }}</td>
+              <td>{{ animal.hunger }}</td>
+              <td>{{ animal.energy }}</td>
+              <td>{{ animal.enclosure_id }}</td>
+              <td>
+                <form method="post" action="{{ url_for('zoo.handle_feed_animal_form', animal_id=animal.id) }}">
+                  <select name="food_id" required>
+                    {% for food in food_catalog %}
+                      <option value="{{ food.id }}">{{ food.name }} ({{ "%.2f"|format(food.price_per_unit) }} €)</option>
+                    {% endfor %}
+                  </select>
+                  <button type="submit">Füttern</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <p id="animal-list-empty-hint" class="hidden">Kein Tier passt zur aktuellen Suche.</p>
+    </div>
   {% else %}
     <p>Es sind noch keine Tiere vorhanden.</p>
   {% endif %}
+{% endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('zoo.static', filename='js/animal_list.js') }}"></script>
 {% endblock %}

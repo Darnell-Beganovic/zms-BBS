@@ -1,47 +1,74 @@
+{#
+  HUD-Leiste (Tag/Kontostand/Level/Sammlung/Attraktivitaet) und
+  Dev-Tools-Panel (Reset-Knopf) ergaenzt mit Unterstuetzung von Kaiss Saleh
+  (Datenbank-Schwerpunkt), Zoo-Spiel-Feature-Ausbau (2026-08-09).
+#}
 {% extends "base.html" %}
 
 {% block title %}Dashboard – Zoo Management System{% endblock %}
 
 {% block content %}
   <h2>{{ zoo.get("name", "Zoo") }}{% if zoo.get("location") %} ({{ zoo.location }}){% endif %}</h2>
-  <p>Besucher: {{ zoo.get("current_visitors", 0) }} / {{ zoo.get("maximum_visitors", 0) }}</p>
 
-  <h3>Ticket kaufen</h3>
-  <form method="post" action="{{ url_for('zoo.handle_buy_ticket_form') }}">
-    <input type="number" name="price" min="0" step="0.01" required placeholder="Preis in €" class="price-input">
-    <button type="submit">Ticket kaufen</button>
-  </form>
+  {% include "_hud.html" %}
 
-  <h3>Simulation</h3>
-  <form method="post" action="{{ url_for('zoo.handle_simulation_step') }}">
-    <button type="submit">Simulationsschritt ausführen</button>
-  </form>
+  <div class="panel">
+    <h3>🎟️ Ticket kaufen</h3>
+    <form method="post" action="{{ url_for('zoo.handle_buy_ticket_form') }}">
+      <input type="number" name="price" min="0" step="0.01" required placeholder="Preis in €" class="price-input">
+      <button type="submit">Ticket kaufen</button>
+    </form>
+  </div>
 
-  <h3>Gehege</h3>
-  {% if enclosures %}
-    <table>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Typ</th>
-          <th>Kapazität</th>
-          <th>Sauberkeit</th>
-          <th>Temperatur</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for enclosure in enclosures %}
+  <div class="panel">
+    <h3>⏭️ Simulation</h3>
+    <form method="post" action="{{ url_for('zoo.handle_simulation_step') }}">
+      <button type="submit">Simulationsschritt ausführen</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3>🏕️ Gehege</h3>
+    {% if enclosures %}
+      <table>
+        <thead>
           <tr>
-            <td>{{ enclosure.name }}</td>
-            <td>{{ enclosure.enclosure_type }}</td>
-            <td>{{ enclosure.capacity }}</td>
-            <td>{{ "%.0f"|format(enclosure.cleanliness * 100) }}%</td>
-            <td>{{ enclosure.temperature }} °C</td>
+            <th>Name</th>
+            <th>Typ</th>
+            <th>Kapazität</th>
+            <th>Sauberkeit</th>
+            <th>Temperatur</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p>Es sind noch keine Gehege angelegt.</p>
-  {% endif %}
+        </thead>
+        <tbody>
+          {% for enclosure in enclosures %}
+            <tr>
+              <td>{{ enclosure.name }}</td>
+              <td>{{ enclosure.enclosure_type }}</td>
+              <td>{{ enclosure.capacity }}</td>
+              <td>{{ "%.0f"|format(enclosure.cleanliness * 100) }}%</td>
+              <td>{{ enclosure.temperature }} °C</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>Es sind noch keine Gehege angelegt.</p>
+    {% endif %}
+  </div>
+
+  {#
+    Reines Dev-/Demo-Werkzeug (siehe zoo_view.py handle_dev_reset() und
+    controller_stub.py reset()) - setzt den Stub auf die Beispieldaten
+    zurueck, ohne dass der Flask-Prozess neu gestartet werden muss. Kein
+    Teil des ZooController-Vertrags.
+  #}
+  <div class="panel">
+    <h3>🛠️ Dev-Tools</h3>
+    <form method="post" action="{{ url_for('zoo.handle_dev_reset') }}">
+      <button type="submit">🔄 Zoo-Daten zurücksetzen</button>
+    </form>
+  </div>
+
+  <script id="animals-data" type="application/json">{{ animals_json | safe }}</script>
 {% endblock %}

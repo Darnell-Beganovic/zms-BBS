@@ -1,37 +1,49 @@
+{#
+  Panel-Look ergaenzt mit Unterstuetzung von Kaiss Saleh
+  (Datenbank-Schwerpunkt), Zoo-Spiel-Feature-Ausbau (2026-08-09).
+#}
 {% extends "base.html" %}
 
 {% block title %}Finanzbericht – Zoo Management System{% endblock %}
 
 {% block content %}
-  <h2>Finanzbericht</h2>
-  <p>Bilanz: {{ "%.2f"|format(balance) }} €</p>
+  <h2>💰 Finanzbericht</h2>
 
-  <p>
-    <a href="{{ url_for('zoo.financial_report', format='csv') }}">Als CSV herunterladen</a>
-    &nbsp;|&nbsp;
-    <a href="{{ url_for('zoo.financial_report', format='xlsx') }}">Als Excel herunterladen</a>
-  </p>
+  <div class="zoo-hud">
+    <div class="hud-stat">
+      <span class="hud-stat-label">Bilanz</span>
+      <span class="hud-stat-value">{{ "%.2f"|format(balance) }} €</span>
+    </div>
+  </div>
 
-  {% if transactions %}
-    <table>
-      <thead>
-        <tr>
-          <th>Typ</th>
-          <th>Betrag</th>
-          <th>Beschreibung</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for transaction in transactions %}
+  <div class="panel">
+    <p>
+      <a href="{{ url_for('zoo.financial_report', format='csv') }}">⬇️ Als CSV herunterladen</a>
+      &nbsp;|&nbsp;
+      <a href="{{ url_for('zoo.financial_report', format='xlsx') }}">⬇️ Als Excel herunterladen</a>
+    </p>
+
+    {% if transactions %}
+      <table>
+        <thead>
           <tr>
-            <td>{{ transaction.transaction_type }}</td>
-            <td>{{ "%.2f"|format(transaction.amount) }} €</td>
-            <td>{{ transaction.description }}</td>
+            <th>Typ</th>
+            <th>Betrag</th>
+            <th>Beschreibung</th>
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  {% else %}
-    <p>Es sind noch keine Transaktionen vorhanden.</p>
-  {% endif %}
+        </thead>
+        <tbody>
+          {% for transaction in transactions %}
+            <tr>
+              <td>{{ transaction.transaction_type }}</td>
+              <td>{{ "%.2f"|format(transaction.amount) }} €</td>
+              <td>{{ transaction.description }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>Es sind noch keine Transaktionen vorhanden.</p>
+    {% endif %}
+  </div>
 {% endblock %}

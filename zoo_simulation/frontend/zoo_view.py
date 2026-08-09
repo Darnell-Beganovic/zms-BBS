@@ -52,6 +52,31 @@ Blueprint seinen `static`-Ordner selbst deklariert, ist die Auslieferung
 unabhaengig davon, wo/wie die App-Instanz erzeugt wird. Templates verweisen
 deshalb auf `url_for('zoo.static', filename=...)`, nicht `url_for('static',
 filename=...)`.
+
+Ergaenzt mit Unterstuetzung von Kaiss Saleh (Datenbank-Schwerpunkt) im Rahmen
+des Zoo-Spiel-Feature-Ausbaus (2026-08-09): HUD-Daten (Simulationstag,
+Kontostand) werden jetzt an `index.html`/`animals_game.html` durchgereicht,
+die Gehege-Liste fuer die Spielansicht wird um Belegung/Kapazitaet
+angereichert, und die neue Route `POST /animals/add` verdrahtet erstmals die
+bereits vereinbarte `ZooController.add_animal(data)`-Methode (Vertrag
+unveraendert, siehe `planning_frontend_alessio.md` Abschnitt 2.1).
+
+Zweite Ausbaustufe (2026-08-09, Tycoon-Feinschliff): `show_zoo_status()`
+reicht jetzt zusaetzlich die Tierliste als JSON durch (fuer Wohlfuehl-Score/
+Zoo-Level/Artensammlung auch auf dem Dashboard, nicht nur der Spielansicht,
+siehe `static/js/zoo_stats.js`); `handle_add_animal_form()` haengt bei Erfolg
+einen `?highlight=<id>`-Query-Parameter an den Redirect (rein praesentations-
+seitig, gleiches Muster wie `?view=`/`?format=`) fuer eine kurze Sprite-
+Hervorhebung; neu die Route `POST /dev/reset` - EXPLIZIT nur ein Stub-/Dev-
+Werkzeug (siehe `controller_stub.py`s `reset()`-Docstring), kein Teil des
+`ZooController`-Vertrags.
+
+Dritte Ausbaustufe (2026-08-09, Tycoon-Wirtschaft): `show_animals()` reicht
+jetzt zusaetzlich `food_catalog` (aus `status_data`, siehe
+`controller_stub.py`) an `animals.html`/`animals_game.html` durch, damit die
+Fuetterungsformulare eine Futterauswahl mit Preis zeigen statt einer
+kontextlosen Zahl - `feed_animal()` selbst bucht die Kosten, diese Datei
+reicht nur die Anzeige-Daten durch.
 """
 
 from __future__ import annotations
@@ -85,6 +110,11 @@ zoo_bp = Blueprint(
 # `None` steht fuer "kein Parameter angegeben" (request.args.get() liefert
 # dann None), gleichbedeutend mit `"html"`.
 _VALID_REPORT_FORMATS = (None, "html", "csv", "xlsx")
+
+# Bekannte Tierarten fuer das "Tier adoptieren"-Formular (Spielansicht) -
+# Single Source of Truth zusammen mit SPECIES_EMOJI in static/js/game.js;
+# spiegelt die Lion/Giraffe/Penguin-Unterklassen aus dem Klassendiagramm.
+_KNOWN_SPECIES = ("Lion", "Giraffe", "Penguin")
 
 # Ein Controller pro Prozess, wiederverwendet ueber alle Requests hinweg -
 # noetig, damit der In-Memory-Zustand des Stubs (siehe controller_stub.py)
@@ -153,7 +183,14 @@ def index() -> str:
     result = _controller.show_status()
     if not result["success"]:
         show_message(result["message"], category="error")
-        return render_template("index.html", zoo={}, enclosures=[])
+        return render_template(
+            "index.html",
+            zoo={},
+            enclosures=[],
+            simulation_time=0,
+            balance=0.0,
+            animals_json="[]",
+        )
     return show_zoo_status(result["data"])
 
 
@@ -168,7 +205,13 @@ def show_zoo_status(status_data: dict) -> str:
 
     Args:
         status_data (dict): Erwartet die Schluessel `"zoo"` (dict) und
-            `"enclosures"` (`pandas.DataFrame`).
+            `"enclosures"` (`pandas.DataFrame`); optional `"simulation_time"`
+            (int) und `"balance"` (float) fuer die HUD-Leiste (siehe
+            `_hud.html`), fehlen sie wird 0/0.0 angezeigt. `"animals"`
+            (`pandas.DataFrame`) wird, sofern vorhanden, als JSON
+            eingebettet, damit `static/js/zoo_stats.js` Wohlfuehl-Score/
+            Zoo-Level/Artensammlung auch auf dem Dashboard berechnen kann
+            (dieselbe Datenquelle, die die Spielansicht laengst nutzt).
 
     Returns:
         str: Gerenderter Inhalt von `templates/index.html`.
@@ -183,9 +226,25 @@ def show_zoo_status(status_data: dict) -> str:
             `show_zoo_status(status_data)` aufgerufen wird, then wird
             stattdessen ein freundlicher "noch keine Gehege"-Hinweis gezeigt,
             keine leere Tabelle.
+        TC-V23: Given `status_data` enthaelt `"simulation_time": 3` und
+            `"balance": 170.0`, when `show_zoo_status(status_data)`
+            aufgerufen wird, then zeigt die HUD-Leiste im Dashboard Tag 3
+            und Kontostand 170.00.
+        TC-V28: Given `status_data["animals"]` enthaelt 7 Tiere, when
+            `show_zoo_status(status_data)` aufgerufen wird, then enthaelt
+            die eingebettete `animals_json`-Nutzlast im Dashboard-HTML genau
+            7 Eintraege.
     """
     enclosures = status_data["enclosures"].to_dict(orient="records")
-    return render_template("index.html", zoo=status_data["zoo"], enclosures=enclosures)
+    animals = status_data["animals"].to_dict(orient="records")
+    return render_template(
+        "index.html",
+        zoo=status_data["zoo"],
+        enclosures=enclosures,
+        simulation_time=status_data.get("simulation_time", 0),
+        balance=status_data.get("balance", 0.0),
+        animals_json=json.dumps(animals),
+    )
 
 
 @zoo_bp.route("/animals", methods=["GET"])
@@ -222,18 +281,37 @@ def list_animals() -> str:
             mitgeschickt, when GET `/animals` aufgerufen wird, then wird das
             2D-Spielbrett (`animals_game.html`) gerendert, nicht die
             Tabelle.
+        TC-V29: Given `?highlight=5` wird mitgeschickt, when GET `/animals`
+            aufgerufen wird, then wird `highlight_animal_id=5` an
+            `show_animals()` durchgereicht, damit `game.js` das frisch
+            adoptierte Tier kurz hervorheben kann.
     """
     view = "list" if request.args.get("view") == "list" else "game"
+    highlight_raw = request.args.get("highlight", "")
+    highlight_animal_id = int(highlight_raw) if highlight_raw.isdigit() else None
+
     result = _controller.show_status()
     if not result["success"]:
         show_message(result["message"], category="error")
         if view == "list":
-            return render_template("animals.html", animals=[])
-        return render_template("animals_game.html", enclosures=[], animals_json="[]")
-    return show_animals(result["data"], view=view)
+            return render_template("animals.html", animals=[], food_catalog=[])
+        return render_template(
+            "animals_game.html",
+            zoo={},
+            enclosures=[],
+            animals_json="[]",
+            simulation_time=0,
+            balance=0.0,
+            known_species=_KNOWN_SPECIES,
+            highlight_animal_id=None,
+            food_catalog=[],
+        )
+    return show_animals(result["data"], view=view, highlight_animal_id=highlight_animal_id)
 
 
-def show_animals(status_data: dict, view: str = "game") -> str:
+def show_animals(
+    status_data: dict, view: str = "game", highlight_animal_id: int | None = None
+) -> str:
     """Rendert die Tieransicht - als Spielbrett (Standard) oder als Tabelle.
 
     Entspricht `ZooView.show_animals(data: DataFrame) Response` im
@@ -250,6 +328,14 @@ def show_animals(status_data: dict, view: str = "game") -> str:
             da die Gehege dort als Boxen gezeichnet werden.
         view (str): `"game"` (Standard) fuer das 2D-Spielbrett,
             `"list"` fuer die urspruengliche HTML-Tabelle.
+        highlight_animal_id (int | None): ID eines Tieres, das im
+            Spielbrett kurz optisch hervorgehoben werden soll (z.B. direkt
+            nach dem Adoptieren, siehe `handle_add_animal_form()`). Reines
+            Praesentationsdetail, wird nur bei `view="game"` verwendet.
+            `status_data` kann zusaetzlich `"food_catalog"` enthalten
+            (Liste von `{"id", "name", "price_per_unit"}`, siehe
+            `controller_stub.py`) fuer die Futterauswahl in beiden
+            Fuetterungsformularen (Tabelle und Spielbrett-Popup).
 
     Returns:
         str: Gerenderter Inhalt von `templates/animals_game.html`
@@ -275,17 +361,38 @@ def show_animals(status_data: dict, view: str = "game") -> str:
             `show_animals(status_data, view="list")` aufgerufen wird, then
             wird stattdessen die urspruengliche Tabelle gerendert, ohne
             Gehege-Boxen oder JSON-Nutzlast.
+        TC-V24: Given ein Gehege mit `capacity=2`, das bereits 2 Tiere
+            enthaelt, when `show_animals(status_data)` (Standard
+            `view="game"`) aufgerufen wird, then hat das entsprechende
+            Gehege im gerenderten Kontext `has_capacity=False`, sodass das
+            "Tier hinzufuegen"-Formular es als voll markieren kann.
+        TC-V33: Given `status_data["food_catalog"]` enthaelt 3 Futtersorten,
+            when `show_animals(status_data, view="list")` aufgerufen wird,
+            then bietet die Futterauswahl in jeder Tierzeile genau diese 3
+            Optionen statt eines freien Zahlenfelds.
     """
     animals = status_data["animals"].to_dict(orient="records")
+    food_catalog = status_data.get("food_catalog", [])
 
     if view == "list":
-        return render_template("animals.html", animals=animals)
+        return render_template("animals.html", animals=animals, food_catalog=food_catalog)
 
     enclosures = status_data["enclosures"].to_dict(orient="records")
+    for enclosure in enclosures:
+        occupied = sum(1 for a in animals if a.get("enclosure_id") == enclosure["id"])
+        enclosure["occupied_count"] = occupied
+        enclosure["has_capacity"] = occupied < enclosure["capacity"]
+
     return render_template(
         "animals_game.html",
+        zoo=status_data.get("zoo", {}),
         enclosures=enclosures,
         animals_json=json.dumps(animals),
+        simulation_time=status_data.get("simulation_time", 0),
+        balance=status_data.get("balance", 0.0),
+        known_species=_KNOWN_SPECIES,
+        highlight_animal_id=highlight_animal_id,
+        food_catalog=food_catalog,
     )
 
 
@@ -349,6 +456,85 @@ def handle_feed_animal_form(animal_id: int):
 
     result = _controller.feed_animal(animal_id, int(food_id_raw))
     show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.list_animals"))
+
+
+@zoo_bp.route("/animals/add", methods=["POST"])
+def handle_add_animal_form():
+    """Route `POST /animals/add`: verarbeitet das "Tier adoptieren"-Formular.
+
+    Neu ergaenzt im Rahmen des Zoo-Spiel-Feature-Ausbaus (siehe Modul-
+    Docstring): verdrahtet erstmals die bereits im Klassendiagramm
+    vereinbarte `ZooController.add_animal(data)`-Methode, die zuvor von
+    keiner Route benutzt wurde - keine Aenderung am Methodenvertrag, nur
+    Erstnutzung. Formular liegt als Modal auf der Spielansicht
+    (`templates/animals_game.html`, `#add-animal-modal`).
+
+    Nur oberflaechliche Validierung (Pflichtfelder, Typen), analog zu
+    `handle_feed_animal_form()`: `name` darf nicht leer sein, `species` muss
+    einer der bekannten Werte aus `_KNOWN_SPECIES` sein, `enclosure_id` muss
+    eine positive Ganzzahl sein. Ob das Zielgehege existiert und noch
+    Kapazitaet hat, entscheidet - wie bei allen Domain-Regeln in diesem
+    Projekt - `ZooController.add_animal()` selbst (siehe
+    `controller_stub.py`), nicht diese Funktion.
+
+    Args:
+        (keine expliziten; `name`/`species`/`enclosure_id` werden aus
+        `flask.request.form` gelesen)
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger Eingabe ein gerenderter
+        Fehlerzustand der Tierliste mit Status 400, ohne dass
+        `ZooController.add_animal()` aufgerufen wird. Bei gueltiger Eingabe
+        ein Redirect (Status 302) zurueck auf `/animals` nach dem
+        Post/Redirect/Get-Muster, mit der Erfolgs-/Fehlermeldung von
+        `ZooController.add_animal()` als Flash-Message.
+
+    Test:
+        TC-V25: Given ein POST-Request mit gueltigem `name`, `species` (aus
+            `_KNOWN_SPECIES`) und der `enclosure_id` eines Geheges mit
+            freier Kapazitaet, when das Formular abgeschickt wird, then wird
+            `ZooController.add_animal()` mit den geparsten Werten
+            aufgerufen und das neue Tier erscheint nach dem Redirect in der
+            Spielansicht.
+        TC-V26: Given ein POST-Request mit leerem `name` oder einer
+            unbekannten `species`, when das Formular abgeschickt wird, then
+            wird der Request mit Status 400 abgelehnt und
+            `ZooController.add_animal()` nicht aufgerufen.
+        TC-V27: Given ein POST-Request mit der `enclosure_id` eines bereits
+            vollen Geheges, when das Formular abgeschickt wird, then zeigt
+            `ZooController.add_animal()` eine "Gehege voll"-Fehlermeldung
+            und kein Tier wird angelegt - die Route leitet trotzdem (mit
+            dieser Fehlermeldung) zurueck zur Spielansicht.
+        TC-V30: Given ein erfolgreicher Adopt-Vorgang, when die Route
+            abgeschlossen ist, then enthaelt das Redirect-Ziel den
+            Query-Parameter `?highlight=<neue-tier-id>`, damit `game.js`
+            das neue Tier kurz optisch hervorheben kann (rein
+            praesentations-seitig, gleiches Muster wie `?view=`/`?format=`).
+    """
+    name = request.form.get("name", "").strip()
+    species = request.form.get("species", "").strip()
+    enclosure_id_raw = request.form.get("enclosure_id", "").strip()
+
+    if (
+        not name
+        or species not in _KNOWN_SPECIES
+        or not enclosure_id_raw.isdigit()
+        or int(enclosure_id_raw) <= 0
+    ):
+        show_message(
+            "Bitte einen Namen, eine bekannte Tierart und ein gueltiges Gehege angeben.",
+            category="error",
+        )
+        return list_animals(), 400
+
+    result = _controller.add_animal(
+        {"name": name, "species": species, "enclosure_id": int(enclosure_id_raw)}
+    )
+    show_message(result["message"], category="success" if result["success"] else "error")
+
+    if result["success"] and result["data"]:
+        return redirect(url_for("zoo.list_animals", highlight=result["data"]["id"]))
     return redirect(url_for("zoo.list_animals"))
 
 
@@ -558,6 +744,48 @@ def show_financial_report(report_data: dict | None = None) -> str:
     return render_template(
         "financial_report.html", transactions=transactions, balance=report_data["balance"]
     )
+
+
+@zoo_bp.route("/dev/reset", methods=["POST"])
+def handle_dev_reset():
+    """Route `POST /dev/reset`: setzt die Stub-Daten auf den Ausgangszustand zurueck.
+
+    EXPLIZIT kein Teil des `ZooController`-Vertrags und keine Route aus der
+    Tabelle in `planning_frontend_alessio.md` Abschnitt 3 - reines Dev-/Demo-
+    Werkzeug fuer die lokale Arbeit gegen `MockZooController` (siehe dortiges
+    `reset()`), damit man fuer einen sauberen Ausgangszustand nicht den
+    ganzen Flask-Prozess neu starten muss. Der `hasattr`-Check sorgt dafuer,
+    dass die Route beim spaeteren Tausch auf den echten `ZooController`
+    (der `reset()` nicht haben wird - Persistenz laeuft dort ueber SQLite)
+    einen freundlichen Fehler statt eines Serverfehlers zeigt, statt still
+    weiterhin "erfolgreich" zu behaupten.
+
+    Args:
+        (keine)
+
+    Returns:
+        Response: Redirect (Status 302) zurueck auf `/`, mit einer
+        Erfolgs-/Fehlermeldung als Flash-Message.
+
+    Test:
+        TC-V31: Given zuvor wurden Tiere adoptiert/gefuettert/Tickets
+            verkauft, when `POST /dev/reset` aufgerufen wird, then zeigt
+            `GET /` danach wieder exakt die urspruenglichen Beispieldaten
+            (7 Tiere, 12 Besucher, Bilanz 170.00).
+        TC-V32: Given der aktuell verwendete Controller hat keine
+            `reset()`-Methode (z.B. der spaetere echte `ZooController`),
+            when `POST /dev/reset` aufgerufen wird, then wird eine
+            Fehlermeldung geflasht statt eines 500-Fehlers, und es wird
+            trotzdem auf `/` zurueckgeleitet.
+    """
+    if hasattr(_controller, "reset"):
+        _controller.reset()
+        show_message("Zoo-Daten wurden auf den Ausgangszustand zurueckgesetzt.", category="success")
+    else:
+        show_message(
+            "Reset wird vom aktuell aktiven Controller nicht unterstuetzt.", category="error"
+        )
+    return redirect(url_for("zoo.index"))
 
 
 if __name__ == "__main__":
