@@ -117,6 +117,18 @@ class SQLiteConnection(DatabaseConnection):
         Wraps the standard library sqlite3 module. Foreign key enforcement
         is enabled on every new connection so that invalid operations
         cannot corrupt referential integrity between tables (NFR-09).
+
+        Fixed 2026-08-09 (Darnell Beganovic, Backend focus) while running
+        the wired-up app for real: `sqlite3.connect()` defaults to
+        `check_same_thread=True`, which raises
+        `sqlite3.ProgrammingError` the moment a request is handled on a
+        different thread than the one that created the connection -
+        Flask's/Werkzeug's dev server (and its debugger) does exactly
+        that, even for a single-process app. `connect()` now passes
+        `check_same_thread=False`. Safe here since this project has a
+        single Flask process with no genuinely concurrent writers (see
+        NFR-05/the single-zoo assumption in planning_db_kaiss.md), not a
+        general concurrency guarantee for arbitrary multi-writer use.
     """
 
     def __init__(self, database_path: str) -> None:
@@ -148,7 +160,7 @@ class SQLiteConnection(DatabaseConnection):
               connect() is called, then sqlite3 raises an
               sqlite3.OperationalError.
         """
-        self._connection = sqlite3.connect(self._database_path)
+        self._connection = sqlite3.connect(self._database_path, check_same_thread=False)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
 
