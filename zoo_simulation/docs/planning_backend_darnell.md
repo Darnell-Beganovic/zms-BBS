@@ -48,6 +48,8 @@ classDiagram
         +show_status() dict
         +add_animal(data: dict) dict
         +feed_animal(animal_id: int, food_id: int) dict
+        +hire_employee(data: dict) dict
+        +clean_enclosure(enclosure_id: int) dict
         +sell_ticket(price: float) dict
         +run_simulation_step() dict
         +create_report(format: Optional[str]) dict
@@ -62,9 +64,10 @@ classDiagram
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
-        +add_animal(animal: Animal, enclosure_id: int) void
+        +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
         +hire_employee(employee: Employee) void
+        +clean_enclosure(enclosure_id: int) void
         +sell_ticket(price: float) void
     }
 
@@ -99,7 +102,7 @@ classDiagram
         +remove_animal(animal_id: int) void
         +has_capacity() bool
         +clean() void
-        +update() void
+        +update(temperature: Optional[float]) void
     }
 
     class Employee {
@@ -425,6 +428,146 @@ Two implementation-driven additions from Sprint 6 (`ZooService`,
   but unused attribute. Kept deliberately simple: one scaled penalty, no
   per-species variation, no other interaction with Behavior/Animal
   internals.
+
+### 2.5 ZooService.add_animal() Returns int, InventoryRepository.create_inventory() (agreed 2026-08-09)
+
+Two small additions made while wiring `ZooController` into the Flask
+frontend (integration work, see `main.py`):
+
+- `ZooService.add_animal()` changes from `void` to `int`, returning the
+  new animal's id (`AnimalRepository.save()`'s own return value, simply
+  no longer discarded). The frontend's "adopt animal" flow
+  (`zoo_view.py`'s `handle_add_animal_form()`) redirects with
+  `?highlight=<new-animal-id>` so the game view can briefly highlight
+  the newly added animal - it needs that id back from
+  `ZooController.add_animal()`, which in turn needs it from
+  `ZooService.add_animal()`. Same pattern as the repository layer's
+  `save()` methods returning `int` instead of `void`.
+- `InventoryRepository`/`SQLInventoryRepository` gain
+  `create_inventory(zoo_id: int) int` (Database focus interface,
+  Backend-authored addition - see that module's docstring for the full
+  rationale): there was no existing way to create the `inventory`
+  table's row itself, since `save_item()`/`save_medication()` both
+  require an already-existing `inventory_id`. Without it, a brand-new
+  Zoo could never get an Inventory to stock, since nothing could create
+  its first `inventory` row.
+
+### 2.6 ZooService Caches the Loaded Zoo (agreed 2026-08-09)
+
+Found while wiring `SimulationEngine`/`ZooService`/`ZooController`
+together for the first time: `ZooService.get_zoo()` originally called
+`ZooRepository.get_by_id()` fresh on every call, and the composition
+root constructs `SimulationEngine` with one `Zoo` instance up front. A
+freshly re-fetched `Zoo` is a *different* Python object each time
+(a new object graph rebuilt from the database rows), even though it
+represents the same conceptual zoo - so an animal added via
+`ZooService.add_animal()` would never appear in the `Zoo` object
+`SimulationEngine` ticks against, and `SimulationEngine`'s own changes
+would never be visible to a later `ZooService.get_zoo()` call either.
+
+Resolved by making `get_zoo()` load the `Zoo` once and cache that exact
+instance for the service's lifetime; `add_animal()`/`feed_animal()`/
+`hire_employee()` now look up and mutate the cached instance's own
+Animal/Enclosure/Inventory objects in place (in addition to persisting
+via the repositories, unchanged), rather than operating on separately-
+fetched copies. `SimulationEngine` is then constructed with this same
+cached `Zoo` object, so both classes always see the same in-memory
+state within one running process.
+
+Deliberately not solved further than this: `SimulationEngine.tick()`'s
+own effects (animal stat changes, salary transactions) are still never
+written back to the database - accepted as a known limitation (see that
+class's docstring) rather than giving it repository access, since
+aufgabe.md does not require production-grade persistence guarantees and
+the added complexity was judged out of proportion for this project's
+scope. A restarted process re-derives its `Zoo` from whatever was last
+persisted via `ZooService`'s own methods, not from any simulated tick
+effects.
+
+### 2.7 ZooController Self-Wiring for Zero-Argument Construction (agreed 2026-08-09)
+
+`zoo_view.py` (Frontend focus) instantiates its controller as
+`_controller = ZooController()` at blueprint-import time, with the
+explicit, already-documented intent that swapping the
+`MockZooController` import for the real class is the *only* change
+needed there (see that module's own docstring). Since this
+instantiation happens before any dedicated composition-root code could
+run, `ZooController.__init__()`'s `zoo_service`/`simulation_service`/
+`report_service` parameters became optional: when omitted, a new
+`_build_default_dependencies()` (in `zoo_controller.py`) connects to a
+real SQLite database (`database/zoo.db` by default), applies
+`schema.sql`, builds every `SQL*Repository`, and seeds a first zoo (one
+Enclosure per known habitat type - Savanna/Grassland/Polar, matching
+`static/js/game.js`'s `SPECIES_HABITATS` exactly so every species is
+adoptable out of the box - plus a stocked Inventory) if none exists
+yet.
+
+This makes `ZooController` a composition root when used this way, which
+is not the cleanest possible separation of concerns in the abstract -
+but it is the only way to fulfill the frontend's already-established,
+already-merged single-touch-point contract without modifying
+`zoo_view.py` beyond that one import line. Explicit constructor
+injection (passing all three services directly) remains fully
+supported and is what every existing test uses; the zero-argument path
+exists specifically for this integration constraint.
+
+### 2.8 Hunger Metabolism and Enclosure Temperature Tracking (agreed 2026-08-09)
+
+Found by actually running the wired-up app (not caught by any prior unit-
+level test, since each one only exercised a single method in isolation):
+
+- Nothing in the domain model ever *increased* `Animal.hunger` -
+  `FeedingBehavior`/`Animal.eat()` only ever decrease it. Animals
+  therefore never actually got hungry, making the entire feeding
+  feature (and its food economy) pointless. `SimulationEngine.
+  update_animals()` now applies a fixed
+  `_METABOLISM_HUNGER_INCREASE_PER_TICK` (12) to every animal each
+  tick, deliberately larger than `FeedingBehavior`'s passive relief (5),
+  so passive foraging alone is not enough to keep an animal fed - manual
+  feeding (`ZooService.feed_animal()`) stays necessary.
+- `Enclosure.temperature` had no way to ever change after construction
+  - `update()` only touched `cleanliness`. It now takes an optional
+  `temperature` parameter; `SimulationEngine.update_enclosures()` passes
+  `environment.temperature` each tick, so every enclosure tracks the
+  current `EnvironmentalFactor` (deliberately simple: no per-habitat
+  climate control, every enclosure shows the same outdoor temperature).
+
+### 2.9 ZooController.hire_employee()/clean_enclosure() (agreed 2026-08-09)
+
+Found by manual testing of the running app: there was no way to
+interact with Employees or manually clean an Enclosure at all - not a
+bug relative to the original diagram, since it never included such
+methods on `ZooController`, but a real capability gap once the app is
+actually used (`Enclosure.clean()`/`Zookeeper.clean_enclosure()`
+existed in the domain model, and `ZooService.hire_employee()` already
+existed too, but nothing above them was ever reachable, and the
+bootstrap seed hired no one either).
+
+Added:
+
+- `ZooService.clean_enclosure(enclosure_id: int) void` (new - the
+  domain/service layer had no manual-cleaning entry point at all): finds
+  the enclosure in the cached `Zoo`, calls `Enclosure.clean()`, persists
+  via `EnclosureRepository.update()`.
+- `ZooController.hire_employee(data: dict) dict` (new): builds the
+  correct concrete `Employee` subclass from `data["role"]`/`data["name"]`/
+  `data["salary"]`, delegates to `ZooService.hire_employee()` (already
+  existed, was simply never called from above).
+- `ZooController.clean_enclosure(enclosure_id: int) dict` (new):
+  delegates to the new `ZooService.clean_enclosure()`.
+- `ZooController.show_status()`'s `data` gains an `employees` key (list
+  of `{"id", "name", "role", "salary"}`) so the frontend can display who
+  is employed - not part of `controller_stub.py`'s original contract,
+  a pure addition.
+- The bootstrap seed (`_seed_initial_zoo()`) now also hires one
+  Zookeeper/Veterinarian/Administrator, so there is someone to see/
+  interact with from the start.
+
+Kept deliberately minimal: no `fire_employee()`, no assigning a
+specific employee to a specific task (e.g. "this Zookeeper cleans this
+Enclosure") - `clean_enclosure()` is a generic action not attributed to
+an individual employee, matching the scope of what was actually asked
+for.
 
 ## 3. OOP Principles Applied in the Backend
 

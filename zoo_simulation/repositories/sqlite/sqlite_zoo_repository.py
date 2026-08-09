@@ -28,6 +28,14 @@
     (`EnclosureRepository.get_all()`/`FinanceRepository.get_balance()`
     have no zoo_id filter, matching every other place in this codebase
     that assumes exactly one Zoo).
+
+    Fixed 2026-08-09 (Darnell Beganovic, Backend focus, while wiring the
+    application entry point): the fix above wired Enclosure/Inventory/
+    Finance but missed `Zoo o-- "0..*" Employee` entirely - every
+    reconstructed Zoo had an empty `.employees` list regardless of what
+    the `employee` table actually held (found by seeding employees and
+    never seeing them again after a reload). `SQLZooRepository` now also
+    composes `EmployeeRepository`, same pattern as the other three.
 """
 
 from __future__ import annotations
@@ -42,6 +50,7 @@ from zoo_simulation.repositories.interfaces.zoo_repository import ZooRepository
 if TYPE_CHECKING:
     from zoo_simulation.database.database_connection import DatabaseConnection
     from zoo_simulation.domain.zoo import Zoo
+    from zoo_simulation.repositories.interfaces.employee_repository import EmployeeRepository
     from zoo_simulation.repositories.interfaces.enclosure_repository import EnclosureRepository
     from zoo_simulation.repositories.interfaces.finance_repository import FinanceRepository
     from zoo_simulation.repositories.interfaces.inventory_repository import InventoryRepository
@@ -63,6 +72,13 @@ class SQLZooRepository(ZooRepository):
           a reconstructed Zoo owns.
         - _finance_repository (FinanceRepository): loads the balance used
           to build the FinanceManager a reconstructed Zoo owns.
+        - _employee_repository (EmployeeRepository): loads the Employees
+          a reconstructed Zoo employs. Added 2026-08-09 (Darnell
+          Beganovic, Backend focus) while wiring the application entry
+          point: the 2026-08-09 fix above wired Enclosure/Inventory/
+          Finance but missed `Zoo o-- "0..*" Employee` entirely - every
+          reconstructed Zoo had an empty `.employees` list regardless of
+          what the `employee` table actually held.
     """
 
     def __init__(
@@ -71,6 +87,7 @@ class SQLZooRepository(ZooRepository):
         enclosure_repository: EnclosureRepository,
         inventory_repository: InventoryRepository,
         finance_repository: FinanceRepository,
+        employee_repository: EmployeeRepository,
     ) -> None:
         """Store the DatabaseConnection and sibling repositories used for Zoo persistence.
 
@@ -84,14 +101,16 @@ class SQLZooRepository(ZooRepository):
             finance_repository (FinanceRepository): used by
                 `_row_to_zoo()` to load the balance for a reconstructed
                 Zoo's FinanceManager.
+            employee_repository (EmployeeRepository): used by
+                `_row_to_zoo()` to load a reconstructed Zoo's Employees.
 
         Test:
-            - Given a connected DatabaseConnection and the three sibling
+            - Given a connected DatabaseConnection and the four sibling
               repositories, when SQLZooRepository is constructed, then
               save()/get_by_id()/update() can be called immediately
               without any further setup.
             - Given the same connection instance is shared with other
-              SQL*Repository objects (including the three passed in here),
+              SQL*Repository objects (including the ones passed in here),
               when both are used, then they operate against the same
               underlying database file and transaction.
         """
@@ -99,6 +118,7 @@ class SQLZooRepository(ZooRepository):
         self._enclosure_repository = enclosure_repository
         self._inventory_repository = inventory_repository
         self._finance_repository = finance_repository
+        self._employee_repository = employee_repository
 
     def save(self, zoo: Zoo) -> int:
         """Insert a new Zoo row.
@@ -210,9 +230,10 @@ class SQLZooRepository(ZooRepository):
         Loads the full aggregate, not just the `zoo` row's own columns:
         Enclosures via `_enclosure_repository`, Inventory via
         `_inventory_repository` (falling back to an empty `Inventory()` if
-        this zoo has no `inventory` row yet), and a `FinanceManager`
-        seeded from `_finance_repository.get_balance()` (see module
-        docstring, "Fixed 2026-08-09").
+        this zoo has no `inventory` row yet), a `FinanceManager` seeded
+        from `_finance_repository.get_balance()` (see module docstring,
+        "Fixed 2026-08-09"), and Employees via `_employee_repository`
+        (added 2026-08-09, see that fix's note on the constructor).
 
         Args:
             row (sqlite3.Row): one row from the `zoo` table (row_factory =
@@ -220,7 +241,7 @@ class SQLZooRepository(ZooRepository):
 
         Returns:
             Zoo: a Zoo instance populated from the row plus its composed
-            Enclosures/Inventory/FinanceManager.
+            Enclosures/Inventory/FinanceManager/Employees.
 
         Raises:
             ValueError: propagated from `Zoo.__init__()` if this zoo has
@@ -229,10 +250,11 @@ class SQLZooRepository(ZooRepository):
                 created, not a new restriction added here.
 
         Test:
-            - Given a row with all columns set and 2 Enclosures already
-              saved, when _row_to_zoo() is called, then the returned
-              Zoo's attributes equal the row's values (row["zoo_id"] ->
-              Zoo.id, etc.) and `.enclosures` has length 2.
+            - Given a row with all columns set, 2 Enclosures and 1
+              Employee already saved, when _row_to_zoo() is called, then
+              the returned Zoo's attributes equal the row's values
+              (row["zoo_id"] -> Zoo.id, etc.), `.enclosures` has length 2
+              and `.employees` has length 1.
             - Given a row where location is NULL, when _row_to_zoo() is
               called, then Zoo.location is None instead of raising a
               conversion error.
@@ -243,6 +265,7 @@ class SQLZooRepository(ZooRepository):
         enclosures = self._enclosure_repository.get_all()
         inventory = self._inventory_repository.get_inventory(zoo_id) or Inventory()
         finance_manager = FinanceManager(balance=self._finance_repository.get_balance())
+        employees = self._employee_repository.get_all()
 
         return Zoo(
             id=zoo_id,
@@ -253,4 +276,5 @@ class SQLZooRepository(ZooRepository):
             enclosures=enclosures,
             inventory=inventory,
             finance_manager=finance_manager,
+            employees=employees,
         )

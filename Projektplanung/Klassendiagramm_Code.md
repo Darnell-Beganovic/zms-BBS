@@ -30,6 +30,8 @@ classDiagram
         +show_status() dict
         +add_animal(data: dict) dict
         +feed_animal(animal_id: int, food_id: int) dict
+        +hire_employee(data: dict) dict
+        +clean_enclosure(enclosure_id: int) dict
         +sell_ticket(price: float) dict
         +run_simulation_step() dict
         +create_report(format: str) dict
@@ -48,9 +50,10 @@ classDiagram
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
-        +add_animal(animal: Animal, enclosure_id: int) void
+        +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
         +hire_employee(employee: Employee) void
+        +clean_enclosure(enclosure_id: int) void
         +sell_ticket(price: float) void
     }
 
@@ -100,7 +103,7 @@ classDiagram
         +remove_animal(animal_id: int) void
         +has_capacity() bool
         +clean() void
-        +update() void
+        +update(temperature: Optional[float]) void
     }
 
     class Employee {
@@ -338,6 +341,7 @@ classDiagram
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
+        +create_inventory(zoo_id: int) int
     }
 
     class FinanceRepository {
@@ -383,6 +387,7 @@ classDiagram
         -EnclosureRepository enclosure_repository
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
+        -EmployeeRepository employee_repository
         +save(zoo: Zoo) int
         +get_by_id(zoo_id: int) Zoo
         +update(zoo: Zoo) void
@@ -443,6 +448,7 @@ classDiagram
         +update_medication(medication: Medication) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
+        +create_inventory(zoo_id: int) int
     }
 
     class SQLFinanceRepository {
@@ -550,5 +556,6 @@ classDiagram
     SQLZooRepository --> EnclosureRepository : loads Enclosures
     SQLZooRepository --> InventoryRepository : loads Inventory
     SQLZooRepository --> FinanceRepository : loads balance
+    SQLZooRepository --> EmployeeRepository : loads Employees
     SQLEmployeeRepository --> FinanceRepository : builds Administrator's FinanceManager
 ```
