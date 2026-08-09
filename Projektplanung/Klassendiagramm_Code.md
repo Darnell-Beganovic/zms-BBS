@@ -124,6 +124,7 @@ classDiagram
     }
 
     class Administrator {
+        -FinanceManager finance_manager
         +perform_task() str
         +record_income(amount: float) void
         +record_expense(amount: float) void
@@ -131,7 +132,7 @@ classDiagram
 
     class Inventory {
         -int id
-        +add_item(item: FoodItem) void
+        +add_item(item: FoodItem|Medication) void
         +remove_item(item_id: int) void
         +consume_item(item_id: int, quantity: float) bool
         +get_low_stock_items() list
@@ -479,7 +480,7 @@ classDiagram
     Zookeeper ..> FoodItem : uses
     Veterinarian ..> Animal : treats
     Veterinarian ..> Medication : uses
-    Administrator ..> FinanceManager : manages
+    Administrator --> FinanceManager : manages
 
     EnvironmentalFactor ..> Behavior : influences
 
