@@ -161,6 +161,27 @@ class Zoo:
         """
         self._employees.append(employee)
 
+    def remove_employee(self, employee_id: int) -> None:
+        """Remove an employee by their ID, if employed here.
+
+        Added 2026-08-09 alongside `ZooService.remove_employee()` (see
+        `planning_backend_darnell.md` section 2.11) - `Zoo` had
+        `add_employee()` but no matching removal, unlike `Enclosure`
+        which already had both `add_animal()`/`remove_animal()`.
+
+        Args:
+            employee_id (int): id of the employee to remove.
+
+        Test:
+            - Given a Zoo employing an Employee with id=3, when
+              `remove_employee(3)` is called, then `.employees` no
+              longer contains that employee.
+            - Given an employee_id not employed here, when
+              `remove_employee()` is called, then `.employees` stays
+              unchanged (no error raised).
+        """
+        self._employees = [employee for employee in self._employees if employee.id != employee_id]
+
     def register_visitor(self) -> bool:
         """Admit one visitor, if the zoo has not reached capacity.
 

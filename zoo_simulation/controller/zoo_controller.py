@@ -41,9 +41,16 @@ if TYPE_CHECKING:
 # Mirrors SQLAnimalRepository's _default_behaviors() defaults (see
 # sqlite_animal_repository.py) - a freshly added animal gets the same
 # reasonable default Behavior set as a reconstructed one, since Behavior
-# objects are never supplied by the frontend's request data.
-_DEFAULT_REST_DURATION = 20
-_DEFAULT_SOCIAL_LEVEL = 50
+# objects are never supplied by the frontend's request data. Lowered from
+# 20/50 to 1/10 alongside that file's own constants, 2026-08-09 - see
+# that module's comment and planning_backend_darnell.md section 2.11.
+# Verified with a real simulation run: RestBehavior(1) + SocialBehavior(10)
+# grant a combined +2 energy/tick, less than every species'
+# Animal.move() cost (Giraffe's smallest, at 3) - so energy now
+# genuinely declines every tick under neutral weather for all three
+# species, not just in theory.
+_DEFAULT_REST_DURATION = 1
+_DEFAULT_SOCIAL_LEVEL = 10
 
 _SPECIES_TO_CLASS = {"Lion": Lion, "Giraffe": Giraffe, "Penguin": Penguin}
 _DEFAULT_FOOD_PREFERENCE = {"Lion": "meat", "Giraffe": "leaves", "Penguin": "fish"}
@@ -473,6 +480,25 @@ class ZooController:
             {"id": employee.id, "name": employee.name, "role": type(employee).__name__, "salary": employee.salary}
             for employee in zoo.employees
         ]
+        # Added 2026-08-09 for the Inventory management tab (see
+        # planning_backend_darnell.md section 2.11) - one combined list
+        # for both FoodItem/Medication rows, with an `is_food` flag so
+        # the frontend can disambiguate ids across the two independent
+        # id sequences (see ZooService._find_inventory_item()'s
+        # docstring) when submitting restock/consume/remove forms.
+        inventory_items = [
+            {
+                "id": item.id,
+                "name": item.name,
+                "is_food": isinstance(item, FoodItem),
+                "food_type": item.food_type if isinstance(item, FoodItem) else None,
+                "price_per_unit": item.price_per_unit if isinstance(item, FoodItem) else None,
+                "quantity": item.quantity,
+                "minimum_quantity": item.minimum_quantity,
+                "is_low_stock": item.is_low_stock(),
+            }
+            for item in zoo.inventory.items
+        ]
 
         return {
             "success": True,
@@ -492,6 +518,7 @@ class ZooController:
                 "food_catalog": food_catalog,
                 "medication_catalog": medication_catalog,
                 "employees": employees,
+                "inventory_items": inventory_items,
             },
         }
 
@@ -562,42 +589,78 @@ class ZooController:
             "data": {"id": new_id, "name": name, "species": species, "enclosure_id": enclosure_id},
         }
 
-    def feed_animal(self, animal_id: int, food_id: int) -> dict[str, Any]:
-        """Feed a stored animal with a stored food item.
+    def remove_animal(self, animal_id: int) -> dict[str, Any]:
+        """Remove a stored animal permanently.
+
+        Added 2026-08-09 (see planning_backend_darnell.md section 2.11)
+        - not part of the original `ZooController` diagram, which had
+        no removal entry point for animals at all.
 
         Args:
-            animal_id (int): id of the animal to feed.
-            food_id (int): id of the FoodItem to feed it with.
+            animal_id (int): id of the animal to remove.
 
         Returns:
             dict: `{"success": bool, "message": str, "data": None}`.
 
         Test:
-            - Given an existing animal and available food, when
-              `feed_animal(animal_id, food_id)` is called, then
-              `success` is True.
+            - Given an existing animal, when `remove_animal(animal_id)`
+              is called, then `success` is True and the animal no
+              longer appears in `show_status()`'s `data["animals"]`.
             - Given an animal_id that does not exist, when
-              `feed_animal()` is called, then `success` is False and
-              `message` describes the error.
+              `remove_animal()` is called, then `success` is False.
         """
         try:
-            self._zoo_service.feed_animal(animal_id, food_id)
+            self._zoo_service.remove_animal(int(animal_id))
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": "Animal removed.", "data": None}
+
+    def feed_animal(self, animal_id: int, food_id: int, zookeeper_id: int) -> dict[str, Any]:
+        """Feed a stored animal with a stored food item, via a specific employed Zookeeper.
+
+        Args:
+            animal_id (int): id of the animal to feed.
+            food_id (int): id of the FoodItem to feed it with.
+            zookeeper_id (int): id of the employed Zookeeper who
+                performs the feeding (added 2026-08-09, see
+                planning_backend_darnell.md section 2.11 - the frontend
+                now lets the user pick which Zookeeper feeds, rather
+                than this being implicit).
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": None}`.
+
+        Test:
+            - Given an existing animal, available food, an employed
+              Zookeeper and an employed Administrator, when
+              `feed_animal(animal_id, food_id, zookeeper_id)` is called,
+              then `success` is True.
+            - Given a zookeeper_id that is not an employed Zookeeper,
+              when `feed_animal()` is called, then `success` is False
+              and `message` describes the error.
+        """
+        try:
+            self._zoo_service.feed_animal(int(animal_id), int(food_id), int(zookeeper_id))
         except ValueError as exc:
             return {"success": False, "message": str(exc), "data": None}
         return {"success": True, "message": "Animal fed.", "data": None}
 
-    def treat_animal(self, animal_id: int, medication_id: int) -> dict[str, Any]:
-        """Treat a stored animal with a stored medication.
+    def treat_animal(self, animal_id: int, medication_id: int, veterinarian_id: int) -> dict[str, Any]:
+        """Treat a stored animal with a stored medication, via a specific employed Veterinarian.
 
         Added 2026-08-09: not part of the original `ZooController`
         diagram - the frontend's "Behandeln" button was a disabled
         placeholder ("Tierarzt-Funktion existiert im Backend noch
         nicht") until now (see `planning_backend_darnell.md` section
-        2.10).
+        2.10). Now requires picking which employed Veterinarian treats
+        (section 2.11), rather than always using "the first employed
+        Veterinarian".
 
         Args:
             animal_id (int): id of the animal to treat.
             medication_id (int): id of the Medication to use.
+            veterinarian_id (int): id of the employed Veterinarian who
+                performs the treatment.
 
         Returns:
             dict: `{"success": bool, "message": str, "data": None}`.
@@ -605,13 +668,14 @@ class ZooController:
         Test:
             - Given an existing animal, available medication and an
               employed Veterinarian, when
-              `treat_animal(animal_id, medication_id)` is called, then
-              `success` is True.
-            - Given the zoo employs no Veterinarian, when
-              `treat_animal()` is called, then `success` is False.
+              `treat_animal(animal_id, medication_id, veterinarian_id)`
+              is called, then `success` is True.
+            - Given a veterinarian_id that is not an employed
+              Veterinarian, when `treat_animal()` is called, then
+              `success` is False.
         """
         try:
-            self._zoo_service.treat_animal(animal_id, medication_id)
+            self._zoo_service.treat_animal(int(animal_id), int(medication_id), int(veterinarian_id))
         except ValueError as exc:
             return {"success": False, "message": str(exc), "data": None}
         return {"success": True, "message": "Animal treated.", "data": None}
@@ -694,34 +758,224 @@ class ZooController:
             "data": {"name": name, "role": role, "salary": salary},
         }
 
-    def clean_enclosure(self, enclosure_id: int) -> dict[str, Any]:
-        """Clean a stored enclosure, resetting its cleanliness to maximum.
+    def remove_employee(self, employee_id: int) -> dict[str, Any]:
+        """Remove a stored employee permanently.
 
-        Added 2026-08-09: not part of the original `ZooController`
-        diagram - `Enclosure.clean()`/`Zookeeper.clean_enclosure()`
-        existed in the domain model, but nothing above the domain layer
-        ever called them (see `planning_backend_darnell.md` section 2.9
-        for the full rationale).
+        Added 2026-08-09 (see planning_backend_darnell.md section 2.11)
+        - not part of the original `ZooController` diagram, which had
+        no removal entry point for employees at all.
 
         Args:
-            enclosure_id (int): id of the enclosure to clean.
+            employee_id (int): id of the employee to remove.
 
         Returns:
             dict: `{"success": bool, "message": str, "data": None}`.
 
         Test:
-            - Given an existing enclosure, when
-              `clean_enclosure(enclosure_id)` is called, then `success`
-              is True and that enclosure's cleanliness is reset to
-              maximum.
-            - Given an enclosure_id that does not exist, when
-              `clean_enclosure()` is called, then `success` is False.
+            - Given an existing employee, when
+              `remove_employee(employee_id)` is called, then `success`
+              is True and that employee no longer appears in
+              `show_status()`'s `data["employees"]`.
+            - Given an employee_id that does not exist, when
+              `remove_employee()` is called, then `success` is False.
         """
         try:
-            self._zoo_service.clean_enclosure(int(enclosure_id))
+            self._zoo_service.remove_employee(int(employee_id))
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": "Employee removed.", "data": None}
+
+    def clean_enclosure(self, enclosure_id: int, zookeeper_id: int) -> dict[str, Any]:
+        """Clean a stored enclosure via a specific employed Zookeeper.
+
+        Added 2026-08-09: not part of the original `ZooController`
+        diagram - `Enclosure.clean()`/`Zookeeper.clean_enclosure()`
+        existed in the domain model, but nothing above the domain layer
+        ever called them (see `planning_backend_darnell.md` section 2.9
+        for the full rationale). Now requires picking which employed
+        Zookeeper performs the cleaning (section 2.11).
+
+        Args:
+            enclosure_id (int): id of the enclosure to clean.
+            zookeeper_id (int): id of the employed Zookeeper who
+                performs the cleaning.
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": None}`.
+
+        Test:
+            - Given an existing enclosure and an employed Zookeeper,
+              when `clean_enclosure(enclosure_id, zookeeper_id)` is
+              called, then `success` is True and that enclosure's
+              cleanliness is reset to maximum.
+            - Given a zookeeper_id that is not an employed Zookeeper,
+              when `clean_enclosure()` is called, then `success` is
+              False.
+        """
+        try:
+            self._zoo_service.clean_enclosure(int(enclosure_id), int(zookeeper_id))
         except ValueError as exc:
             return {"success": False, "message": str(exc), "data": None}
         return {"success": True, "message": "Enclosure cleaned.", "data": None}
+
+    def add_food_item(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Add a brand-new FoodItem type to the zoo's Inventory.
+
+        Added 2026-08-09 for the Inventory management tab (see
+        planning_backend_darnell.md section 2.11).
+
+        Args:
+            data (dict): expected keys `"name"` (str), `"food_type"`
+                (str). Optional: `"quantity"`, `"price_per_unit"`,
+                `"minimum_quantity"` (default 0.0 each, matching
+                `FoodItem`'s own constructor defaults).
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": dict | None}`.
+            On success, `data` contains the new item's `id`.
+
+        Test:
+            - Given data={"name": "Heu", "food_type": "hay", "quantity":
+              50.0, "price_per_unit": 2.5}, when `add_food_item(data)`
+              is called, then `success` is True and `data["id"]` is a
+              positive int.
+            - Given data missing `"name"`, when `add_food_item()` is
+              called, then `success` is False and nothing is persisted.
+        """
+        try:
+            name = data["name"]
+            food_type = data["food_type"]
+            food_item = FoodItem(
+                name=name,
+                food_type=food_type,
+                quantity=float(data.get("quantity", 0.0)),
+                price_per_unit=float(data.get("price_per_unit", 0.0)),
+                minimum_quantity=float(data.get("minimum_quantity", 0.0)),
+            )
+            new_id = self._zoo_service.add_food_item(food_item)
+        except KeyError as exc:
+            return {"success": False, "message": f"Missing required field: {exc}", "data": None}
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": f"{name} was added to the inventory.", "data": {"id": new_id}}
+
+    def add_medication(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Add a brand-new Medication type to the zoo's Inventory.
+
+        Added 2026-08-09, same rationale as `add_food_item()`.
+
+        Args:
+            data (dict): expected key `"name"` (str). Optional:
+                `"quantity"`, `"minimum_quantity"` (default 0.0 each).
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": dict | None}`.
+            On success, `data` contains the new medication's `id`.
+
+        Test:
+            - Given data={"name": "Antibiotikum", "quantity": 10.0},
+              when `add_medication(data)` is called, then `success` is
+              True and `data["id"]` is a positive int.
+            - Given data missing `"name"`, when `add_medication()` is
+              called, then `success` is False and nothing is persisted.
+        """
+        try:
+            name = data["name"]
+            medication = Medication(
+                name=name,
+                quantity=float(data.get("quantity", 0.0)),
+                minimum_quantity=float(data.get("minimum_quantity", 0.0)),
+            )
+            new_id = self._zoo_service.add_medication(medication)
+        except KeyError as exc:
+            return {"success": False, "message": f"Missing required field: {exc}", "data": None}
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": f"{name} was added to the inventory.", "data": {"id": new_id}}
+
+    def restock_inventory_item(self, item_id: int, is_food: bool, amount: float) -> dict[str, Any]:
+        """Increase a stocked FoodItem's/Medication's quantity.
+
+        Added 2026-08-09 for the Inventory management tab (see
+        planning_backend_darnell.md section 2.11).
+
+        Args:
+            item_id (int): id of the item to restock.
+            is_food (bool): True for a FoodItem, False for a Medication.
+            amount (float): amount to add.
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": None}`.
+
+        Test:
+            - Given an existing FoodItem, when
+              `restock_inventory_item(item_id, True, 5.0)` is called,
+              then `success` is True.
+            - Given an item_id that does not exist for the requested
+              kind, when `restock_inventory_item()` is called, then
+              `success` is False.
+        """
+        try:
+            self._zoo_service.restock_inventory_item(int(item_id), bool(is_food), float(amount))
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": "Inventory item restocked.", "data": None}
+
+    def consume_inventory_item(self, item_id: int, is_food: bool, amount: float) -> dict[str, Any]:
+        """Manually consume some quantity of a stocked FoodItem/Medication.
+
+        Added 2026-08-09 for the Inventory management tab (see
+        planning_backend_darnell.md section 2.11).
+
+        Args:
+            item_id (int): id of the item to consume from.
+            is_food (bool): True for a FoodItem, False for a Medication.
+            amount (float): amount to consume.
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": None}`.
+
+        Test:
+            - Given an existing FoodItem with sufficient stock, when
+              `consume_inventory_item(item_id, True, 4.0)` is called,
+              then `success` is True.
+            - Given `amount` exceeding current stock, when
+              `consume_inventory_item()` is called, then `success` is
+              False.
+        """
+        try:
+            self._zoo_service.consume_inventory_item(int(item_id), bool(is_food), float(amount))
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": "Inventory item consumed.", "data": None}
+
+    def remove_inventory_item(self, item_id: int, is_food: bool) -> dict[str, Any]:
+        """Remove a FoodItem/Medication type from the Inventory entirely.
+
+        Added 2026-08-09 for the Inventory management tab (see
+        planning_backend_darnell.md section 2.11).
+
+        Args:
+            item_id (int): id of the item to remove.
+            is_food (bool): True for a FoodItem, False for a Medication.
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": None}`.
+
+        Test:
+            - Given a stocked FoodItem, when
+              `remove_inventory_item(item_id, True)` is called, then
+              `success` is True and it no longer appears in
+              `show_status()`'s `data["inventory_items"]`.
+            - Given an item_id that does not exist for the requested
+              kind, when `remove_inventory_item()` is called, then
+              `success` is False.
+        """
+        try:
+            self._zoo_service.remove_inventory_item(int(item_id), bool(is_food))
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": "Inventory item removed.", "data": None}
 
     def run_simulation_step(self) -> dict[str, Any]:
         """Advance the simulation by one tick.

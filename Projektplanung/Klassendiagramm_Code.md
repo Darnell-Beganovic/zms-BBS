@@ -29,11 +29,18 @@ classDiagram
         -ReportService report_service
         +show_status() dict
         +add_animal(data: dict) dict
-        +feed_animal(animal_id: int, food_id: int) dict
-        +treat_animal(animal_id: int, medication_id: int) dict
+        +remove_animal(animal_id: int) dict
+        +feed_animal(animal_id: int, food_id: int, zookeeper_id: int) dict
+        +treat_animal(animal_id: int, medication_id: int, veterinarian_id: int) dict
         +hire_employee(data: dict) dict
-        +clean_enclosure(enclosure_id: int) dict
+        +remove_employee(employee_id: int) dict
+        +clean_enclosure(enclosure_id: int, zookeeper_id: int) dict
         +sell_ticket(price: float) dict
+        +add_food_item(data: dict) dict
+        +add_medication(data: dict) dict
+        +restock_inventory_item(item_id: int, is_food: bool, amount: float) dict
+        +consume_inventory_item(item_id: int, is_food: bool, amount: float) dict
+        +remove_inventory_item(item_id: int, is_food: bool) dict
         +run_simulation_step() dict
         +create_report(format: str) dict
     }
@@ -52,11 +59,18 @@ classDiagram
         -FinanceRepository finance_repository
         +get_zoo() Zoo
         +add_animal(animal: Animal, enclosure_id: int) int
-        +feed_animal(animal_id: int, food_id: int) void
-        +treat_animal(animal_id: int, medication_id: int) void
+        +remove_animal(animal_id: int) void
+        +feed_animal(animal_id: int, food_id: int, zookeeper_id: int) void
+        +treat_animal(animal_id: int, medication_id: int, veterinarian_id: int) void
         +hire_employee(employee: Employee) void
-        +clean_enclosure(enclosure_id: int) void
+        +remove_employee(employee_id: int) void
+        +clean_enclosure(enclosure_id: int, zookeeper_id: int) void
         +sell_ticket(price: float) void
+        +add_food_item(food_item: FoodItem) int
+        +add_medication(medication: Medication) int
+        +restock_inventory_item(item_id: int, is_food: bool, amount: float) void
+        +consume_inventory_item(item_id: int, is_food: bool, amount: float) void
+        +remove_inventory_item(item_id: int, is_food: bool) void
     }
 
     class SimulationService {
@@ -89,6 +103,7 @@ classDiagram
         -int maximum_visitors
         +add_enclosure(enclosure: Enclosure) void
         +add_employee(employee: Employee) void
+        +remove_employee(employee_id: int) void
         +register_visitor() bool
         +calculate_average_welfare() float
     }
@@ -132,8 +147,8 @@ classDiagram
     class Administrator {
         -FinanceManager finance_manager
         +perform_task() str
-        +record_income(amount: float) void
-        +record_expense(amount: float) void
+        +record_income(amount: float, description: str) Transaction
+        +record_expense(amount: float, description: str) Transaction
     }
 
     class Inventory {
@@ -337,10 +352,12 @@ classDiagram
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +delete_item(item_id: int) void
         +save_medication(medication: Medication, inventory_id: int) int
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
+        +delete_medication(medication_id: int) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
         +create_inventory(zoo_id: int) int
@@ -444,10 +461,12 @@ classDiagram
         +get_item(item_id: int) FoodItem
         +get_all_items() list
         +update_item(item: FoodItem) void
+        +delete_item(item_id: int) void
         +save_medication(medication: Medication, inventory_id: int) int
         +get_medication(medication_id: int) Medication
         +get_all_medications() list
         +update_medication(medication: Medication) void
+        +delete_medication(medication_id: int) void
         +get_as_dataframe() DataFrame
         +get_inventory(zoo_id: int) Inventory
         +create_inventory(zoo_id: int) int

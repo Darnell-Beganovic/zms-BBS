@@ -31,6 +31,15 @@
     and no method inserted one). A brand-new Zoo has no FoodItem/
     Medication rows to save yet, so nothing could ever create its
     `inventory` row in the first place.
+
+    Added 2026-08-09 (Darnell Beganovic, Backend focus, while wiring the
+    Inventory management tab - see planning_backend_darnell.md section
+    2.11): `delete_item(item_id)`/`delete_medication(medication_id)` -
+    the interface had `save_item()`/`update_item()` but no way to
+    permanently remove a stocked item, even though the domain's
+    `Inventory.remove_item()` already existed for exactly that. Same
+    kind of real, general gap as `create_inventory()` above, not a
+    project-specific one-off.
 """
 
 from __future__ import annotations
@@ -144,6 +153,23 @@ class InventoryRepository(ABC):
         raise NotImplementedError
 
     @abstractmethod
+    def delete_item(self, item_id: int) -> None:
+        """Remove a FoodItem from storage.
+
+        Args:
+            item_id (int): primary key of the FoodItem to delete.
+
+        Test:
+            - Any implementation, given an item_id that exists, when
+              delete_item() is called, must make a subsequent get_item()
+              for that id return None.
+            - Any implementation, given an item_id that does not exist,
+              when delete_item() is called, must not raise an unhandled
+              exception (no-op instead of crash).
+        """
+        raise NotImplementedError
+
+    @abstractmethod
     def save_medication(self, medication: Medication, inventory_id: int) -> int:
         """Persist a new Medication.
 
@@ -230,6 +256,24 @@ class InventoryRepository(ABC):
               exist in storage, when update_medication() is called, must
               not silently create a new row and must not corrupt existing
               data (NFR-09).
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    def delete_medication(self, medication_id: int) -> None:
+        """Remove a Medication from storage.
+
+        Args:
+            medication_id (int): primary key of the Medication to
+                delete.
+
+        Test:
+            - Any implementation, given a medication_id that exists,
+              when delete_medication() is called, must make a
+              subsequent get_medication() for that id return None.
+            - Any implementation, given a medication_id that does not
+              exist, when delete_medication() is called, must not raise
+              an unhandled exception (no-op instead of crash).
         """
         raise NotImplementedError
 

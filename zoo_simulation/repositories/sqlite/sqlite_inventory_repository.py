@@ -210,6 +210,22 @@ class SQLInventoryRepository(InventoryRepository):
             self._connection.rollback()
             raise
 
+    def delete_item(self, item_id: int) -> None:
+        """Delete a FoodItem row.
+
+        Args:
+            item_id (int): primary key of the FoodItem to delete.
+
+        Test:
+            - Given an item_id that exists, when delete_item() is
+              called, then get_item() afterward returns None.
+            - Given an item_id that does not exist, when delete_item()
+              is called, then no exception is raised (zero rows
+              affected).
+        """
+        self._connection.execute("DELETE FROM food_item WHERE food_id = ?", (item_id,))
+        self._connection.commit()
+
     def save_medication(self, medication: Medication, inventory_id: int) -> int:
         """Insert a new Medication row.
 
@@ -324,6 +340,24 @@ class SQLInventoryRepository(InventoryRepository):
         except Exception:
             self._connection.rollback()
             raise
+
+    def delete_medication(self, medication_id: int) -> None:
+        """Delete a Medication row.
+
+        Args:
+            medication_id (int): primary key of the Medication to
+                delete.
+
+        Test:
+            - Given a medication_id that exists, when
+              delete_medication() is called, then get_medication()
+              afterward returns None.
+            - Given a medication_id that does not exist, when
+              delete_medication() is called, then no exception is
+              raised (zero rows affected).
+        """
+        self._connection.execute("DELETE FROM medication WHERE medication_id = ?", (medication_id,))
+        self._connection.commit()
 
     def get_as_dataframe(self) -> pd.DataFrame:
         """Load all inventory stock (FoodItem and Medication) as one DataFrame.
