@@ -178,13 +178,29 @@ class Enclosure:
         """
         self._cleanliness = _CLEANLINESS_MAX
 
-    def update(self) -> None:
-        """Advance one simulation tick: cleanliness decays over time.
+    def update(self, temperature: float | None = None) -> None:
+        """Advance one simulation tick: cleanliness decays, temperature may track the environment.
+
+        Args:
+            temperature (float | None, optional): if given, replaces
+                `.temperature` outright (added 2026-08-09 - see
+                `SimulationEngine.update_enclosures()`, the only current
+                caller that passes it: every enclosure simply tracks the
+                current `EnvironmentalFactor.temperature` each tick, a
+                deliberately simple "no climate control" model, since
+                `Enclosure` otherwise had no way to ever change
+                `.temperature` after construction). Defaults to None,
+                which leaves `.temperature` unchanged - `clean()` and
+                direct `update()` calls in tests never need to pass it.
 
         Test:
             - Given cleanliness=100.0, when `update()` is called, then
-              `.cleanliness` is 95.0.
+              `.cleanliness` is 95.0 and `.temperature` is unchanged.
+            - Given temperature=15.0, when `update(temperature=28.0)` is
+              called, then `.temperature` is 28.0.
             - Given cleanliness=2.0, when `update()` is called, then
               `.cleanliness` is 0.0 (clamped, not negative).
         """
         self._cleanliness = max(0.0, self._cleanliness - _CLEANLINESS_DECAY_PER_TICK)
+        if temperature is not None:
+            self._temperature = temperature

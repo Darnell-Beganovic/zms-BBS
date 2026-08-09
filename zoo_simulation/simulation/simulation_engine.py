@@ -15,6 +15,16 @@ if TYPE_CHECKING:
 
 _MAX_ENVIRONMENT_ENERGY_PENALTY = 10
 
+# Base metabolic hunger increase per tick, applied to every animal
+# regardless of its composed Behaviors. Added 2026-08-09: nothing else
+# in the domain model ever increased hunger (FeedingBehavior/Animal.eat()
+# only ever decrease it), so animals never actually needed feeding -
+# found by actually running the wired-up app. Deliberately larger than
+# FeedingBehavior's passive relief (5/tick), so an animal with only
+# passive foraging still gets hungrier over time and manual feeding
+# stays meaningful.
+_METABOLISM_HUNGER_INCREASE_PER_TICK = 12
+
 
 class SimulationEngine:
     """SimulationEngine - advances the whole zoo by one discrete time step per tick.
@@ -136,42 +146,52 @@ class SimulationEngine:
         extra energy penalty scaled by how unfavorable the current
         `environment` is (`EnvironmentalFactor.get_influence_factor()`)
         - e.g. a storm at night costs a bit more energy than a sunny day,
-        on top of whatever the animal's own Behaviors already did. This
-        is the one place `environment` is actually used, kept
-        deliberately simple (a single scaled penalty, no per-species
-        variation).
+        on top of whatever the animal's own Behaviors already did. Also
+        applies `_METABOLISM_HUNGER_INCREASE_PER_TICK` to every animal
+        (added 2026-08-09 - see that constant's comment): this, not the
+        Behaviors, is what actually makes feeding necessary over time.
 
         Test:
             - Given an enclosure housing 2 animals, when
               `update_animals()` is called, then both animals' `update()`
-              and `grow_older()` were each called exactly once.
+              and `grow_older()` were each called exactly once and both
+              animals' hunger increased.
             - Given `environment` reports an influence factor of 1.0
               (fully favorable), when `update_animals()` is called, then
               no extra energy penalty is applied beyond the animals' own
-              Behaviors.
+              Behaviors (hunger still increases from metabolism).
         """
         penalty = round((1 - self._environment.get_influence_factor()) * _MAX_ENVIRONMENT_ENERGY_PENALTY)
         for enclosure in self._zoo.enclosures:
             for animal in enclosure.animals:
                 animal.update()
                 animal.grow_older()
+                animal.adjust_hunger(_METABOLISM_HUNGER_INCREASE_PER_TICK)
                 if penalty > 0:
                     animal.adjust_energy(-penalty)
 
     def update_enclosures(self) -> None:
         """Update every enclosure in the zoo by one step.
 
+        Each enclosure's cleanliness decays (see `Enclosure.update()`)
+        and its temperature is set to track the current `environment`'s
+        temperature (added 2026-08-09: `Enclosure.temperature` had no
+        other way to ever change after construction - found by actually
+        running the wired-up app). Deliberately simple: every enclosure
+        tracks the same outdoor temperature exactly, no per-habitat
+        climate control.
+
         Test:
             - Given a zoo with 2 enclosures, when `update_enclosures()`
-              is called, then both enclosures' `update()` (cleanliness
-              decay) was called exactly once.
+              is called, then both enclosures' `update()` was called
+              exactly once and both now report `environment.temperature`.
             - Given a zoo with zero enclosures (not possible via `Zoo`'s
               own 1..* constructor rule, but defensively), when
               `update_enclosures()` is called, then it simply does
               nothing (no error).
         """
         for enclosure in self._zoo.enclosures:
-            enclosure.update()
+            enclosure.update(temperature=self._environment.temperature)
 
     def process_daily_costs(self) -> None:
         """Deduct one day of salary for every employee from the zoo's finances.

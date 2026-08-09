@@ -99,7 +99,7 @@ classDiagram
         +remove_animal(animal_id: int) void
         +has_capacity() bool
         +clean() void
-        +update() void
+        +update(temperature: Optional[float]) void
     }
 
     class Employee {
@@ -507,6 +507,27 @@ already-merged single-touch-point contract without modifying
 injection (passing all three services directly) remains fully
 supported and is what every existing test uses; the zero-argument path
 exists specifically for this integration constraint.
+
+### 2.8 Hunger Metabolism and Enclosure Temperature Tracking (agreed 2026-08-09)
+
+Found by actually running the wired-up app (not caught by any prior unit-
+level test, since each one only exercised a single method in isolation):
+
+- Nothing in the domain model ever *increased* `Animal.hunger` -
+  `FeedingBehavior`/`Animal.eat()` only ever decrease it. Animals
+  therefore never actually got hungry, making the entire feeding
+  feature (and its food economy) pointless. `SimulationEngine.
+  update_animals()` now applies a fixed
+  `_METABOLISM_HUNGER_INCREASE_PER_TICK` (12) to every animal each
+  tick, deliberately larger than `FeedingBehavior`'s passive relief (5),
+  so passive foraging alone is not enough to keep an animal fed - manual
+  feeding (`ZooService.feed_animal()`) stays necessary.
+- `Enclosure.temperature` had no way to ever change after construction
+  - `update()` only touched `cleanliness`. It now takes an optional
+  `temperature` parameter; `SimulationEngine.update_enclosures()` passes
+  `environment.temperature` each tick, so every enclosure tracks the
+  current `EnvironmentalFactor` (deliberately simple: no per-habitat
+  climate control, every enclosure shows the same outdoor temperature).
 
 ## 3. OOP Principles Applied in the Backend
 

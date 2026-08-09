@@ -100,7 +100,7 @@ classDiagram
         +remove_animal(animal_id: int) void
         +has_capacity() bool
         +clean() void
-        +update() void
+        +update(temperature: Optional[float]) void
     }
 
     class Employee {
