@@ -1,5 +1,7 @@
 # Zoo Management System (ZMS)
 
+Repository: [github.com/Darnell-Beganovic/zms-BBS](https://github.com/Darnell-Beganovic/zms-BBS)
+
 The Zoo Management System (ZMS) is a Python-based software project that simulates the management and daily operation of a zoo using object-oriented programming principles.
 
 The application combines administrative functionality, animal management and a time-based simulation within a modular software architecture. The project is developed as part of the *Programming II* module.
@@ -85,7 +87,7 @@ zoo_simulation/
 Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Darnell-Beganovic/zms-BBS.git
 ```
 
 Navigate to the project directory:
