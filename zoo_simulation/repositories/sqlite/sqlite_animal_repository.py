@@ -350,6 +350,10 @@ class SQLAnimalRepository(AnimalRepository):
               _SPECIES_TO_CLASS (e.g. corrupted data), when
               _row_to_animal() is called, then a ValueError is raised
               instead of silently returning a wrong/generic object.
+            - Given a row where age/health/hunger/energy are NULL
+              (schema.sql allows it - no NOT NULL constraint), when
+              _row_to_animal() is called, then Animal's own constructor
+              defaults are used instead of raising TypeError.
         """
         species = row["species"]
         if species not in _SPECIES_TO_CLASS:
@@ -358,13 +362,14 @@ class SQLAnimalRepository(AnimalRepository):
         module_path, class_name = _SPECIES_TO_CLASS[species]
         animal_class = getattr(importlib.import_module(module_path), class_name)
 
-        return animal_class(
-            id=row["animal_id"],
-            name=row["name"],
-            food_preference=row["food_preference"],
-            behaviors=self._default_behaviors(row["food_preference"]),
-            age=row["age"],
-            health=row["health"],
-            hunger=row["hunger"],
-            energy=row["energy"],
-        )
+        kwargs = {
+            "id": row["animal_id"],
+            "name": row["name"],
+            "food_preference": row["food_preference"],
+            "behaviors": self._default_behaviors(row["food_preference"]),
+        }
+        for stat in ("age", "health", "hunger", "energy"):
+            if row[stat] is not None:
+                kwargs[stat] = row[stat]
+
+        return animal_class(**kwargs)

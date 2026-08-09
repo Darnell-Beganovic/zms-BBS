@@ -102,6 +102,11 @@ class SQLInventoryRepository(InventoryRepository):
             - Given a database connection failure (e.g. a locked file),
               when save_item() is called, then the transaction is rolled
               back, no partial row is written, and no id is returned.
+            - Given a FoodItem with a negative quantity/price_per_unit/
+              minimum_quantity (violating schema.sql's CHECK
+              constraints), when save_item() is called, then a
+              ValueError is raised instead of an unhandled
+              sqlite3.IntegrityError.
         """
         try:
             cursor = self._connection.execute(
@@ -121,6 +126,9 @@ class SQLInventoryRepository(InventoryRepository):
             )
             self._connection.commit()
             return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid FoodItem data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise
@@ -195,6 +203,9 @@ class SQLInventoryRepository(InventoryRepository):
                 ),
             )
             self._connection.commit()
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid FoodItem data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise
@@ -223,6 +234,11 @@ class SQLInventoryRepository(InventoryRepository):
               when save_medication() is called, then the transaction is
               rolled back, no partial row is written, and no id is
               returned.
+            - Given a Medication with a negative quantity/
+              minimum_quantity (violating schema.sql's CHECK
+              constraints), when save_medication() is called, then a
+              ValueError is raised instead of an unhandled
+              sqlite3.IntegrityError.
         """
         try:
             cursor = self._connection.execute(
@@ -234,6 +250,9 @@ class SQLInventoryRepository(InventoryRepository):
             )
             self._connection.commit()
             return cursor.lastrowid
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid Medication data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise
@@ -299,6 +318,9 @@ class SQLInventoryRepository(InventoryRepository):
                 (medication.name, medication.quantity, medication.minimum_quantity, medication.id),
             )
             self._connection.commit()
+        except sqlite3.IntegrityError as exc:
+            self._connection.rollback()
+            raise ValueError(f"Invalid Medication data: {exc}") from exc
         except Exception:
             self._connection.rollback()
             raise

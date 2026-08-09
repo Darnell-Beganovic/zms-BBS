@@ -181,7 +181,10 @@ class SQLEmployeeRepository(EmployeeRepository):
               empty list is returned, not None.
         """
         rows = self._connection.execute("SELECT * FROM employee").fetchall()
-        return [self._row_to_employee(row) for row in rows]
+        shared_finance_manager = None
+        if any(row["employee_type"] in _TYPES_REQUIRING_FINANCE_MANAGER for row in rows):
+            shared_finance_manager = FinanceManager(balance=self._finance_repository.get_balance())
+        return [self._row_to_employee(row, finance_manager=shared_finance_manager) for row in rows]
 
     def update(self, employee: Employee) -> None:
         """Update an existing Employee row.
@@ -230,13 +233,21 @@ class SQLEmployeeRepository(EmployeeRepository):
             self._connection.rollback()
             raise
 
-    def _row_to_employee(self, row: sqlite3.Row) -> Employee:
+    def _row_to_employee(self, row: sqlite3.Row, finance_manager: FinanceManager | None = None) -> Employee:
         """Build the correct concrete Employee subclass from one `employee` row.
 
         Args:
             row (sqlite3.Row): one row from the `employee` table
                 (row_factory = sqlite3.Row, see
                 SQLiteConnection.connect()).
+            finance_manager (FinanceManager | None, optional): a
+                pre-built FinanceManager to reuse for this row if it
+                turns out to be an Administrator, instead of querying
+                `get_balance()` again. `get_all()` builds one shared
+                instance up front so N stored Administrators cost one
+                `get_balance()` call, not N. Defaults to None, in which
+                case a fresh one is built on demand (used by
+                `get_by_id()`, where only a single row is ever loaded).
 
         Returns:
             Employee: a Zookeeper/Veterinarian/Administrator instance
@@ -268,7 +279,7 @@ class SQLEmployeeRepository(EmployeeRepository):
 
         extra_kwargs = {}
         if employee_type in _TYPES_REQUIRING_FINANCE_MANAGER:
-            extra_kwargs["finance_manager"] = FinanceManager(
+            extra_kwargs["finance_manager"] = finance_manager or FinanceManager(
                 balance=self._finance_repository.get_balance()
             )
 
