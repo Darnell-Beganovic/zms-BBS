@@ -449,6 +449,38 @@ frontend (integration work, see `main.py`):
   Zoo could never get an Inventory to stock, since nothing could create
   its first `inventory` row.
 
+### 2.6 ZooService Caches the Loaded Zoo (agreed 2026-08-09)
+
+Found while wiring `SimulationEngine`/`ZooService`/`ZooController`
+together for the first time: `ZooService.get_zoo()` originally called
+`ZooRepository.get_by_id()` fresh on every call, and the composition
+root constructs `SimulationEngine` with one `Zoo` instance up front. A
+freshly re-fetched `Zoo` is a *different* Python object each time
+(a new object graph rebuilt from the database rows), even though it
+represents the same conceptual zoo - so an animal added via
+`ZooService.add_animal()` would never appear in the `Zoo` object
+`SimulationEngine` ticks against, and `SimulationEngine`'s own changes
+would never be visible to a later `ZooService.get_zoo()` call either.
+
+Resolved by making `get_zoo()` load the `Zoo` once and cache that exact
+instance for the service's lifetime; `add_animal()`/`feed_animal()`/
+`hire_employee()` now look up and mutate the cached instance's own
+Animal/Enclosure/Inventory objects in place (in addition to persisting
+via the repositories, unchanged), rather than operating on separately-
+fetched copies. `SimulationEngine` is then constructed with this same
+cached `Zoo` object, so both classes always see the same in-memory
+state within one running process.
+
+Deliberately not solved further than this: `SimulationEngine.tick()`'s
+own effects (animal stat changes, salary transactions) are still never
+written back to the database - accepted as a known limitation (see that
+class's docstring) rather than giving it repository access, since
+aufgabe.md does not require production-grade persistence guarantees and
+the added complexity was judged out of proportion for this project's
+scope. A restarted process re-derives its `Zoo` from whatever was last
+persisted via `ZooService`'s own methods, not from any simulated tick
+effects.
+
 ## 3. OOP Principles Applied in the Backend
 
 - **Abstraction**: `Employee` and `Animal` are abstract base classes; concrete

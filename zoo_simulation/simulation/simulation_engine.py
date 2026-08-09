@@ -26,6 +26,21 @@ class SimulationEngine:
     deliberately simple 1-tick-equals-1-day model, since aufgabe.md
     specifies no calendar granularity.
 
+    Known limitation (accepted 2026-08-09 while wiring the application
+    entry point): purely in-memory. It mutates the composed `Zoo`
+    object's Animal/Enclosure/FinanceManager state directly, but never
+    persists any of that back through a repository - `Employee`
+    salary deductions never become a stored Transaction, and
+    hunger/energy/age/cleanliness changes never reach the database.
+    Consistency with `ZooService` in the same process is still given
+    (`ZooService.get_zoo()` caches and returns this exact same `Zoo`
+    instance, see that class's docstring), but a process restart loses
+    every effect a `tick()` ever produced. Fixing this would mean
+    giving either this class or `SimulationService` repository access
+    to write back changed Animals/Enclosures/Transactions after each
+    tick - deliberately out of scope for now (aufgabe.md's own
+    disclaimer: not meant to be a fully production-ready product).
+
         - Constructor: stores all attributes privately; `current_step`
           only changes through `tick()`, never assigned directly.
         - _zoo (Zoo): the zoo this engine advances. Not persisted or

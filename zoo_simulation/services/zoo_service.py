@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from zoo_simulation.domain.food_item import FoodItem
+
 if TYPE_CHECKING:
     from zoo_simulation.domain.animals.animal import Animal
     from zoo_simulation.domain.employees.employee import Employee
@@ -33,8 +35,23 @@ class ZooService:
 
     Deliberately does not itself construct/wire concrete
     SQL*Repository/DatabaseConnection instances - that composition-root
-    wiring is out of scope for this class (see main.py, still a stub)
-    and left to a dedicated integration step.
+    wiring lives in `zoo_controller.py`'s default-construction path (see
+    `main.py`).
+
+    `get_zoo()` loads the managed Zoo aggregate once and caches that
+    exact instance for the service's lifetime (added 2026-08-09 while
+    wiring `SimulationEngine`): the two are constructed with the very
+    same `Zoo` object in the composition root, so `SimulationEngine`
+    always ticks against whatever `ZooService` currently has in memory,
+    instead of a stale snapshot from startup. Every mutating method
+    therefore updates this cached object's in-memory graph *and*
+    persists via the repositories - not just one or the other - so
+    reads (`get_zoo()`, and by extension `SimulationEngine`) stay
+    consistent with what was just written. Simulation tick effects
+    themselves (hunger/energy/age/cleanliness changes, salary
+    transactions) are intentionally NOT persisted back to the database
+    by this class - see `SimulationEngine`'s own docstring for that
+    documented limitation.
 
         - Constructor: stores all repository interfaces and the managed
           `zoo_id` privately.
@@ -43,6 +60,8 @@ class ZooService:
           (AnimalRepository), _enclosure_repository (EnclosureRepository),
           _employee_repository (EmployeeRepository), _inventory_repository
           (InventoryRepository), _finance_repository (FinanceRepository).
+        - _zoo_cache (Zoo | None): lazily loaded by `get_zoo()`, then
+          reused for the rest of this service's lifetime.
     """
 
     def __init__(
@@ -87,12 +106,14 @@ class ZooService:
         self._employee_repository = employee_repository
         self._inventory_repository = inventory_repository
         self._finance_repository = finance_repository
+        self._zoo_cache: Zoo | None = None
 
     def get_zoo(self) -> Zoo:
-        """Load the managed Zoo aggregate.
+        """Load the managed Zoo aggregate, caching it for subsequent calls.
 
         Returns:
-            Zoo: the zoo this service manages.
+            Zoo: the zoo this service manages - the same instance on
+                every call after the first (see class docstring).
 
         Raises:
             ValueError: if the managed `zoo_id` does not exist in
@@ -103,13 +124,16 @@ class ZooService:
             - Given a stored Zoo matching the managed zoo_id, when
               `get_zoo()` is called, then the returned Zoo's `.id`
               matches it.
-            - Given the managed zoo_id does not exist in storage, when
-              `get_zoo()` is called, then a ValueError is raised.
+            - Given `get_zoo()` was already called once successfully,
+              when it is called again, then the exact same Zoo instance
+              is returned (no second repository lookup).
         """
-        zoo = self._zoo_repository.get_by_id(self._zoo_id)
-        if zoo is None:
-            raise ValueError(f"Zoo {self._zoo_id} not found.")
-        return zoo
+        if self._zoo_cache is None:
+            zoo = self._zoo_repository.get_by_id(self._zoo_id)
+            if zoo is None:
+                raise ValueError(f"Zoo {self._zoo_id} not found.")
+            self._zoo_cache = zoo
+        return self._zoo_cache
 
     def add_animal(self, animal: Animal, enclosure_id: int) -> int:
         """Add a new animal to an existing enclosure, if it has room.
@@ -134,18 +158,26 @@ class ZooService:
         Test:
             - Given an existing enclosure with free capacity, when
               `add_animal(animal, enclosure_id)` is called, then the
-              returned id is a positive int and the animal is persisted
-              via AnimalRepository.save() with that enclosure_id.
+              returned id is a positive int, the animal is persisted via
+              AnimalRepository.save() with that enclosure_id, and
+              `get_zoo()`'s matching enclosure now includes it.
             - Given an enclosure_id that does not exist, when
               `add_animal()` is called, then a ValueError is raised and
               nothing is persisted.
         """
-        enclosure = self._enclosure_repository.get_by_id(enclosure_id)
+        zoo = self.get_zoo()
+        enclosure = next((e for e in zoo.enclosures if e.id == enclosure_id), None)
         if enclosure is None:
             raise ValueError(f"Enclosure {enclosure_id} not found.")
         if not enclosure.has_capacity():
             raise ValueError(f"Enclosure {enclosure_id} is at full capacity.")
-        return self._animal_repository.save(animal, enclosure_id)
+
+        new_id = self._animal_repository.save(animal, enclosure_id)
+        # animal.id is None (read-only, never settable) - re-fetch so the
+        # cached Zoo's graph holds a correctly-identified instance,
+        # consistent with every other animal loaded via the repository.
+        enclosure.add_animal(self._animal_repository.get_by_id(new_id))
+        return new_id
 
     def feed_animal(self, animal_id: int, food_id: int) -> None:
         """Feed a stored animal with a stored food item.
@@ -161,15 +193,22 @@ class ZooService:
             - Given an animal with hunger=80 and available food, when
               `feed_animal(animal_id, food_id)` is called, then hunger
               decreases and the food's stored quantity decreases by the
-              expected amount.
+              expected amount, visible both via `get_zoo()` and in
+              storage.
             - Given an animal id that does not exist, when
               `feed_animal()` is called, then a ValueError is raised and
               no inventory change occurs.
         """
-        animal = self._animal_repository.get_by_id(animal_id)
+        zoo = self.get_zoo()
+        animal = next(
+            (a for enclosure in zoo.enclosures for a in enclosure.animals if a.id == animal_id), None
+        )
         if animal is None:
             raise ValueError(f"Animal {animal_id} not found.")
-        food = self._inventory_repository.get_item(food_id)
+        food = next(
+            (item for item in zoo.inventory.items if item.id == food_id and isinstance(item, FoodItem)),
+            None,
+        )
         if food is None:
             raise ValueError(f"FoodItem {food_id} not found.")
 
@@ -188,12 +227,16 @@ class ZooService:
         Test:
             - Given a new Zookeeper instance, when `hire_employee()` is
               called, then it is persisted via EmployeeRepository.save()
-              for the managed zoo_id.
+              for the managed zoo_id and appears in `get_zoo().employees`
+              afterward.
             - Given two different Employee instances, when
               `hire_employee()` is called for each, then both are
               persisted as separate rows.
         """
-        self._employee_repository.save(employee, self._zoo_id)
+        new_id = self._employee_repository.save(employee, self._zoo_id)
+        # employee.id is None (read-only, never settable) - re-fetch for
+        # the same reason as add_animal().
+        self.get_zoo().add_employee(self._employee_repository.get_by_id(new_id))
 
     def sell_ticket(self, price: float) -> None:
         """Sell one visitor ticket, if the zoo has not reached capacity.
