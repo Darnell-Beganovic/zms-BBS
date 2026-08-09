@@ -96,7 +96,7 @@ if __package__ in (None, ""):
 
 from flask import Blueprint, flash, redirect, render_template, request, send_file, url_for
 
-from zoo_simulation.frontend.controller_stub import MockZooController as ZooController
+from zoo_simulation.controller.zoo_controller import ZooController
 
 zoo_bp = Blueprint(
     "zoo",
