@@ -9,12 +9,15 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import pandas as pd
+
 from zoo_simulation.domain.animals.giraffe import Giraffe
 from zoo_simulation.domain.animals.lion import Lion
 from zoo_simulation.domain.animals.penguin import Penguin
 from zoo_simulation.domain.behaviors.feeding_behavior import FeedingBehavior
 from zoo_simulation.domain.behaviors.rest_behavior import RestBehavior
 from zoo_simulation.domain.behaviors.social_behavior import SocialBehavior
+from zoo_simulation.domain.food_item import FoodItem
 
 if TYPE_CHECKING:
     from zoo_simulation.domain.behaviors.behavior import Behavior
@@ -39,6 +42,14 @@ _DEFAULT_FOOD_PREFERENCE = {"Lion": "meat", "Giraffe": "leaves", "Penguin": "fis
 
 _CSV_MIMETYPE = "text/csv"
 _XLSX_MIMETYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# Enclosure.cleanliness is 0-100 in the domain model (same scale as
+# health/hunger/energy), but the frontend's established contract (see
+# controller_stub.py's _enclosures and templates/animals_game.html's own
+# comment: "enclosure.cleanliness ist im Stub eine Bruchzahl 0-1")
+# expects a 0-1 fraction. Converted here, at the presentation boundary,
+# rather than changing Enclosure's own internal scale.
+_CLEANLINESS_FRACTION_DIVISOR = 100.0
 
 
 def _default_behaviors(food_preference: str) -> list[Behavior]:
@@ -118,20 +129,28 @@ class ZooController:
 
         Returns:
             dict: `{"success": bool, "message": str, "data": dict | None}`.
-            On success, `data` contains `zoo` (dict of id/name/location/
-            current_visitors/maximum_visitors), `enclosures` (list of
-            dicts, each with its animals as a list of dicts),
-            `average_welfare` (float), `balance` (float) and
-            `simulation_time` (int). This shape is a Backend-side default
-            - aligning it 1:1 with the frontend's `MockZooController`
-            stub shape is part of the future integration step, not done
-            here.
+            On success, `data` matches `controller_stub.py`'s
+            `MockZooController.show_status()` contract exactly (the
+            frontend's established, already-merged interface - see
+            `zoo_view.py`'s `show_zoo_status()`/`show_animals()`) so this
+            method is a drop-in replacement:
+            `zoo` (flat dict of id/name/location/current_visitors/
+            maximum_visitors), `animals` (`pandas.DataFrame`, one row per
+            animal with columns id/name/species/age/health/hunger/energy/
+            enclosure_id), `enclosures` (`pandas.DataFrame`, one row per
+            enclosure with columns id/name/enclosure_type/capacity/
+            cleanliness/temperature - `cleanliness` converted from the
+            domain's 0-100 scale to the frontend's established 0-1
+            fraction), `simulation_time` (int), `balance` (float) and
+            `food_catalog` (list of `{"id", "name", "price_per_unit"}`,
+            built from the zoo's Inventory FoodItems, ignoring any
+            Medications it also holds).
 
         Test:
             - Given a zoo with 1 enclosure and 2 animals, when
               `show_status()` is called, then `success` is True and
-              `data["enclosures"]` has length 1 with 2 entries in its
-              `animals` list.
+              `data["animals"]` has 2 rows, both with that enclosure's id
+              in their `enclosure_id` column.
             - Given the managed zoo cannot be loaded (e.g. misconfigured
               zoo_id), when `show_status()` is called, then `success` is
               False and `message` describes the error.
@@ -141,28 +160,35 @@ class ZooController:
         except ValueError as exc:
             return {"success": False, "message": str(exc), "data": None}
 
-        enclosures = [
+        animal_rows = [
+            {
+                "id": animal.id,
+                "name": animal.name,
+                "species": animal.species,
+                "age": animal.age,
+                "health": animal.health,
+                "hunger": animal.hunger,
+                "energy": animal.energy,
+                "enclosure_id": enclosure.id,
+            }
+            for enclosure in zoo.enclosures
+            for animal in enclosure.animals
+        ]
+        enclosure_rows = [
             {
                 "id": enclosure.id,
                 "name": enclosure.name,
                 "enclosure_type": enclosure.enclosure_type,
                 "capacity": enclosure.capacity,
-                "cleanliness": enclosure.cleanliness,
+                "cleanliness": enclosure.cleanliness / _CLEANLINESS_FRACTION_DIVISOR,
                 "temperature": enclosure.temperature,
-                "animals": [
-                    {
-                        "id": animal.id,
-                        "name": animal.name,
-                        "species": animal.species,
-                        "age": animal.age,
-                        "health": animal.health,
-                        "hunger": animal.hunger,
-                        "energy": animal.energy,
-                    }
-                    for animal in enclosure.animals
-                ],
             }
             for enclosure in zoo.enclosures
+        ]
+        food_catalog = [
+            {"id": item.id, "name": item.name, "price_per_unit": item.price_per_unit}
+            for item in zoo.inventory.items
+            if isinstance(item, FoodItem)
         ]
 
         return {
@@ -176,10 +202,11 @@ class ZooController:
                     "current_visitors": zoo.current_visitors,
                     "maximum_visitors": zoo.maximum_visitors,
                 },
-                "enclosures": enclosures,
-                "average_welfare": zoo.calculate_average_welfare(),
-                "balance": zoo.finance_manager.get_balance(),
+                "animals": pd.DataFrame(animal_rows),
+                "enclosures": pd.DataFrame(enclosure_rows),
                 "simulation_time": self._simulation_service.get_simulation_time(),
+                "balance": zoo.finance_manager.get_balance(),
+                "food_catalog": food_catalog,
             },
         }
 
@@ -198,12 +225,18 @@ class ZooController:
 
         Returns:
             dict: `{"success": bool, "message": str, "data": dict | None}`.
+            On success, `data` contains the new animal's `id`
+            (`ZooService.add_animal()`'s return value) plus `name`/
+            `species`/`enclosure_id` - `zoo_view.py`'s
+            `handle_add_animal_form()` reads `data["id"]` to highlight
+            the newly added animal after redirecting, matching
+            `controller_stub.py`'s established contract.
 
         Test:
             - Given data={"species": "Lion", "name": "Simba",
               "enclosure_id": 1} and enclosure 1 has free capacity, when
               `add_animal(data)` is called, then `success` is True and
-              the animal is persisted via `ZooService.add_animal()`.
+              `data["id"]` is a positive int.
             - Given data with an unknown species (e.g. "Elephant"), when
               `add_animal(data)` is called, then `success` is False and
               no animal is persisted.
@@ -228,7 +261,7 @@ class ZooController:
                     kwargs[stat] = data[stat]
 
             animal = animal_class(**kwargs)
-            self._zoo_service.add_animal(animal, enclosure_id)
+            new_id = self._zoo_service.add_animal(animal, enclosure_id)
         except KeyError as exc:
             return {"success": False, "message": f"Missing required field: {exc}", "data": None}
         except ValueError as exc:
@@ -237,7 +270,7 @@ class ZooController:
         return {
             "success": True,
             "message": f"{name} was added to enclosure {enclosure_id}.",
-            "data": {"name": name, "species": species, "enclosure_id": enclosure_id},
+            "data": {"id": new_id, "name": name, "species": species, "enclosure_id": enclosure_id},
         }
 
     def feed_animal(self, animal_id: int, food_id: int) -> dict[str, Any]:
@@ -313,11 +346,15 @@ class ZooController:
 
         Matches the `GET /reports/financial` route (see
         planning_frontend_alessio.md's route table). For `format` in
-        (`None`, `"html"`), `data["report"]` carries the raw DataFrame
-        for an in-page table. For `"csv"`/`"xlsx"`, a temporary file is
-        written via `ReportService.export_csv()`/`export_excel()` and
-        `data` carries `{"file_path": str, "mimetype": str}` so the
-        Flask route can stream it back via `send_file()`.
+        (`None`, `"html"`), `data` carries `"report"` (the raw
+        transactions DataFrame) and `"balance"` (float, from the zoo's
+        FinanceManager) for an in-page table - matching
+        `controller_stub.py`'s established contract exactly (see
+        `zoo_view.py`'s `show_financial_report()`, which reads both
+        keys). For `"csv"`/`"xlsx"`, a temporary file is written via
+        `ReportService.export_csv()`/`export_excel()` and `data` carries
+        `{"file_path": str, "mimetype": str}` so the Flask route can
+        stream it back via `send_file()`.
 
         Args:
             format (str | None, optional): `None`/`"html"`, `"csv"` or
@@ -330,8 +367,8 @@ class ZooController:
 
         Test:
             - Given `format=None`, when `create_report()` is called,
-              then `success` is True and `data["report"]` is a
-              DataFrame.
+              then `success` is True, `data["report"]` is a DataFrame
+              and `data["balance"]` is a float.
             - Given `format="csv"`, when `create_report("csv")` is
               called, then `success` is True, `data["file_path"]` points
               to an existing `.csv` file and `data["mimetype"]` is
@@ -343,10 +380,14 @@ class ZooController:
         report = self._report_service.create_financial_report()
 
         if format in (None, "html"):
+            try:
+                balance = self._zoo_service.get_zoo().finance_manager.get_balance()
+            except ValueError:
+                balance = 0.0
             return {
                 "success": True,
                 "message": "Financial report generated.",
-                "data": {"report": report},
+                "data": {"report": report, "balance": balance},
             }
 
         if format not in ("csv", "xlsx"):
