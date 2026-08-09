@@ -8,6 +8,12 @@
   Schwerpunkt), verdrahtet ZooController.hire_employee()/clean_enclosure()
   erstmals (2026-08-09) - beide Methoden existierten vorher nicht auf dem
   Controller, siehe planning_backend_darnell.md Abschnitt 2.9.
+
+  "Entfernen"-Knopf je Mitarbeiter sowie Tierpfleger-Auswahl im
+  "Reinigen"-Formular ergaenzt mit Unterstuetzung von Alessio Bellamacina
+  (Frontend-Schwerpunkt), 2026-08-09 - siehe planning_backend_darnell.md
+  Abschnitt 2.11. Ist kein Tierpfleger (mehr) angestellt, wird der
+  "Reinigen"-Knopf deaktiviert statt eine 400-Fehlerseite zu zeigen.
 #}
 {% extends "base.html" %}
 
@@ -33,6 +39,7 @@
     </form>
   </div>
 
+  {% set zookeepers = employees | selectattr("role", "equalto", "Zookeeper") | list %}
   <div class="panel">
     <h3>🏕️ Gehege</h3>
     {% if enclosures %}
@@ -56,8 +63,17 @@
               <td>{{ "%.0f"|format(enclosure.cleanliness * 100) }}%</td>
               <td>{{ enclosure.temperature }} °C</td>
               <td>
-                <form method="post" action="{{ url_for('zoo.handle_clean_enclosure_form', enclosure_id=enclosure.id) }}">
-                  <button type="submit">🧹 Reinigen</button>
+                <form method="post" action="{{ url_for('zoo.handle_clean_enclosure_form', enclosure_id=enclosure.id) }}" class="inventory-inline-form">
+                  {% if zookeepers %}
+                    <select name="zookeeper_id" required>
+                      {% for zookeeper in zookeepers %}
+                        <option value="{{ zookeeper.id }}">{{ zookeeper.name }}</option>
+                      {% endfor %}
+                    </select>
+                    <button type="submit">🧹 Reinigen</button>
+                  {% else %}
+                    <button type="button" disabled title="Kein Tierpfleger eingestellt">🧹 Reinigen</button>
+                  {% endif %}
                 </form>
               </td>
             </tr>
@@ -78,6 +94,7 @@
             <th>Name</th>
             <th>Rolle</th>
             <th>Gehalt</th>
+            <th></th>
           </tr>
         </thead>
         <tbody>
@@ -86,6 +103,11 @@
               <td>{{ employee.name }}</td>
               <td>{{ employee.role }}</td>
               <td>{{ "%.2f"|format(employee.salary) }} €</td>
+              <td>
+                <form method="post" action="{{ url_for('zoo.handle_remove_employee_form', employee_id=employee.id) }}">
+                  <button type="submit" title="Entlassen">🗑️</button>
+                </form>
+              </td>
             </tr>
           {% endfor %}
         </tbody>

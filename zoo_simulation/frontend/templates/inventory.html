@@ -1,0 +1,89 @@
+{#
+  Inventar-Tab (2026-08-09) ergaenzt mit Unterstuetzung von Alessio
+  Bellamacina (Frontend-Schwerpunkt) - siehe
+  planning_backend_darnell.md Abschnitt 2.11. Verdrahtet erstmals die
+  vollstaendige Inventarverwaltung: Anlegen neuer Futter-/Medikamenten-
+  arten, Aufstocken, manuelles Verbrauchen (Inventory.consume_item(),
+  zuvor nirgendwo aufgerufen) und dauerhaftes Entfernen
+  (Inventory.remove_item(), ebenfalls zuvor nirgendwo aufgerufen).
+  Niedrigbestand (Inventory.get_low_stock_items()) wird optisch
+  hervorgehoben.
+#}
+{% extends "base.html" %}
+
+{% block title %}Inventar – Zoo Management System{% endblock %}
+
+{% block content %}
+  <h2>📦 Inventar</h2>
+
+  {% include "_hud.html" %}
+
+  <div class="panel">
+    <h3>Bestand</h3>
+    {% if inventory_items %}
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Art</th>
+            <th>Bestand</th>
+            <th>Mindestbestand</th>
+            <th>Preis/Einheit</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in inventory_items %}
+            <tr{% if item.is_low_stock %} class="inventory-row-low-stock"{% endif %}>
+              <td>{{ item.name }}{% if item.is_low_stock %} ⚠️{% endif %}</td>
+              <td>{{ "Futter (" ~ item.food_type ~ ")" if item.is_food else "Medikament" }}</td>
+              <td>{{ "%.1f"|format(item.quantity) }}</td>
+              <td>{{ "%.1f"|format(item.minimum_quantity) }}</td>
+              <td>{{ "%.2f €"|format(item.price_per_unit) if item.is_food else "–" }}</td>
+              <td class="inventory-actions">
+                <form method="post" action="{{ url_for('zoo.handle_restock_item_form', item_id=item.id) }}" class="inventory-inline-form">
+                  <input type="hidden" name="item_type" value="{{ 'food' if item.is_food else 'medication' }}">
+                  <input type="number" name="amount" min="0.01" step="0.01" required placeholder="Menge" class="price-input">
+                  <button type="submit" title="Aufstocken">➕</button>
+                </form>
+                <form method="post" action="{{ url_for('zoo.handle_consume_item_form', item_id=item.id) }}" class="inventory-inline-form">
+                  <input type="hidden" name="item_type" value="{{ 'food' if item.is_food else 'medication' }}">
+                  <input type="number" name="amount" min="0.01" step="0.01" required placeholder="Menge" class="price-input">
+                  <button type="submit" title="Verbrauchen">➖</button>
+                </form>
+                <form method="post" action="{{ url_for('zoo.handle_remove_item_form', item_id=item.id) }}" class="inventory-inline-form">
+                  <input type="hidden" name="item_type" value="{{ 'food' if item.is_food else 'medication' }}">
+                  <button type="submit" title="Entfernen">🗑️</button>
+                </form>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p>Das Inventar ist leer.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h3>🌾 Neue Futtersorte anlegen</h3>
+    <form method="post" action="{{ url_for('zoo.handle_add_food_item_form') }}" class="hire-employee-form">
+      <input type="text" name="name" required maxlength="50" placeholder="Name">
+      <input type="text" name="food_type" required maxlength="30" placeholder="Futterart (z. B. meat)">
+      <input type="number" name="quantity" min="0" step="0.01" placeholder="Startbestand" class="price-input">
+      <input type="number" name="price_per_unit" min="0" step="0.01" placeholder="Preis/Einheit" class="price-input">
+      <input type="number" name="minimum_quantity" min="0" step="0.01" placeholder="Mindestbestand" class="price-input">
+      <button type="submit">Anlegen</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h3>💊 Neue Medikamentenart anlegen</h3>
+    <form method="post" action="{{ url_for('zoo.handle_add_medication_form') }}" class="hire-employee-form">
+      <input type="text" name="name" required maxlength="50" placeholder="Name">
+      <input type="number" name="quantity" min="0" step="0.01" placeholder="Startbestand" class="price-input">
+      <input type="number" name="minimum_quantity" min="0" step="0.01" placeholder="Mindestbestand" class="price-input">
+      <button type="submit">Anlegen</button>
+    </form>
+  </div>
+{% endblock %}

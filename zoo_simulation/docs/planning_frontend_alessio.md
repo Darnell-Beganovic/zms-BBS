@@ -141,10 +141,21 @@ Responsibility principle already stated in section 4.
 
 | Route | Method | Purpose | Controller call |
 |-------|--------|---------|------------------|
-| `/` | GET | Show zoo dashboard (visitors, enclosures) | `ZooController.show_status()` |
+| `/` | GET | Show zoo dashboard (visitors, enclosures, employees) | `ZooController.show_status()` |
 | `/animals` | GET | List all animals with state (hunger, health, energy) | `ZooController.show_status()` |
-| `/animals/<id>/feed` | POST | Submit feeding form | `ZooController.feed_animal(animal_id, food_id)` |
+| `/animals/<id>/feed` | POST | Submit feeding form (picks a Zookeeper, see section 3.3) | `ZooController.feed_animal(animal_id, food_id, zookeeper_id)` |
+| `/animals/<id>/treat` | POST | Submit treatment form (picks a Veterinarian, see section 3.3) | `ZooController.treat_animal(animal_id, medication_id, veterinarian_id)` |
+| `/animals/<id>/remove` | POST | Remove an animal permanently (see section 3.3) | `ZooController.remove_animal(animal_id)` |
 | `/animals/add` | POST | Submit "adopt animal" form (see section 3.2) | `ZooController.add_animal(data)` |
+| `/employees/hire` | POST | Submit "hire employee" form (see section 3.2) | `ZooController.hire_employee(data)` |
+| `/employees/<id>/remove` | POST | Remove (fire) an employee permanently (see section 3.3) | `ZooController.remove_employee(employee_id)` |
+| `/enclosures/<id>/clean` | POST | Clean an enclosure (picks a Zookeeper, see section 3.3) | `ZooController.clean_enclosure(enclosure_id, zookeeper_id)` |
+| `/inventory` | GET | Show the Inventory tab (stock, low-stock highlight, see section 3.3) | `ZooController.show_status()` |
+| `/inventory/food/add` | POST | Submit "add food type" form | `ZooController.add_food_item(data)` |
+| `/inventory/medication/add` | POST | Submit "add medication type" form | `ZooController.add_medication(data)` |
+| `/inventory/<id>/restock` | POST | Restock a food/medication item | `ZooController.restock_inventory_item(item_id, is_food, amount)` |
+| `/inventory/<id>/consume` | POST | Manually consume some stock | `ZooController.consume_inventory_item(item_id, is_food, amount)` |
+| `/inventory/<id>/remove` | POST | Remove a food/medication item permanently | `ZooController.remove_inventory_item(item_id, is_food)` |
 | `/tickets/buy` | POST | Submit ticket purchase form | `ZooController.sell_ticket(price)` |
 | `/simulation/step` | POST | Trigger one simulation tick | `ZooController.run_simulation_step()` |
 | `/reports/financial` | GET | Display / download financial report (CSV/Excel) | `ZooController.create_report(format)` |
@@ -243,6 +254,44 @@ additional keys, or (c) is pure client-side presentation with no new
   yet) — it is a cosmetic toggle keyed off `simulation_time`'s parity.
 - **`POST /dev/reset`:** see the route table note above — a stub-only
   development convenience, not part of this section's contract discussion.
+
+### 3.3 Inventory Tab, Removal, Explicit Staff Selection (agreed 2026-08-09, with Darnell Beganovic)
+
+Implemented together with the Backend focus - see `planning_backend_darnell.md`
+section 2.11 for the full rationale of each `ZooController`/`ZooService`
+change this wires up.
+
+- **`/inventory` (new page, `templates/inventory.html`):** lists every
+  stocked `FoodItem`/`Medication` with quantity/minimum quantity/price,
+  highlighting rows where `is_low_stock` is true; forms to add a new
+  food/medication type, restock, manually consume, and permanently
+  remove a posten. Linked from the header nav (`templates/base.html`).
+- **Feed/treat/clean forms now require picking a staff member:** the
+  feeding and treatment forms in the animal popup
+  (`templates/animals_game.html`) and the "Reinigen" form on the
+  dashboard (`templates/index.html`) each gained a `<select>` populated
+  from `show_status()`'s existing `employees` list, filtered by role in
+  Jinja (`employees | selectattr("role", "equalto", "Zookeeper")`) —
+  no new controller data was needed for this. If no employee of the
+  required role is currently hired, the form is replaced by a disabled
+  button with an explanatory `title`, mirroring the pattern the earlier
+  "Behandeln" placeholder used, instead of letting the form 400.
+- **"Alle hungrigen füttern" quick actions do not prompt per animal:**
+  `game.js`'s `lastZookeeperId` remembers the last Zookeeper chosen in
+  the popup (defaulting to the first employed one) and reuses it for
+  both the global and per-enclosure bulk-feed buttons.
+- **Remove animal/employee:** a "Entfernen" button in the animal popup
+  and a matching one per row in the employee table
+  (`templates/index.html`), both plain POST-and-redirect forms with no
+  fields.
+- **Sleeping animation guarantee (with Animal.move()/sleep() now wired
+  in on the Backend side):** since simulation ticks only advance on a
+  manual button click, `animation.js` gained a purely cosmetic,
+  client-only `triggerRandomNap()` timer that periodically shows a
+  random sprite as "sleeping" for a few seconds - independent of the
+  real `energy` stat - so the 💤 animation is reliably visible within a
+  short real-time window regardless of how many simulation steps have
+  actually run.
 
 ## 4. OOP Principles Applied in the Frontend
 

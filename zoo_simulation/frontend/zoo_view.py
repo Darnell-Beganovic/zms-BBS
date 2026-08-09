@@ -95,6 +95,20 @@ Alessio Bellamacina, Frontend-Schwerpunkt): neue Route
 `planning_backend_darnell.md` Abschnitt 2.10) mit dem zuvor deaktivierten
 "Behandeln"-Button in `animals_game.html`. `show_animals()` reicht dazu
 zusaetzlich `medication_catalog` durch, analog zu `food_catalog`.
+
+Sechste Ausbaustufe (2026-08-09, Inventar-Tab & Personalauswahl, mit
+Unterstuetzung von Alessio Bellamacina, Frontend-Schwerpunkt; siehe
+`planning_backend_darnell.md` Abschnitt 2.11): neue Routen
+`GET /inventory` sowie `POST /inventory/food/add`,
+`POST /inventory/medication/add`, `POST /inventory/<id>/restock`,
+`POST /inventory/<id>/consume`, `POST /inventory/<id>/remove` verdrahten
+die vollstaendige Inventarverwaltung (`Inventory.add_item()`/
+`remove_item()`/`consume_item()`, zuvor teilweise nie aufgerufen). Neue
+Routen `POST /animals/<id>/remove`/`POST /employees/<id>/remove`
+entfernen Tiere/Mitarbeiter dauerhaft. `handle_feed_animal_form()`/
+`handle_treat_animal_form()`/`handle_clean_enclosure_form()` verlangen
+jetzt zusaetzlich `zookeeper_id`/`veterinarian_id` - welcher Mitarbeiter
+die Aktion ausfuehrt, wird nicht mehr implizit angenommen.
 """
 
 from __future__ import annotations
@@ -334,6 +348,8 @@ def list_animals() -> str:
             known_species=_KNOWN_SPECIES,
             highlight_animal_id=None,
             food_catalog=[],
+            medication_catalog=[],
+            employees=[],
         )
     return show_animals(result["data"], view=view, highlight_animal_id=highlight_animal_id)
 
@@ -424,6 +440,7 @@ def show_animals(
         highlight_animal_id=highlight_animal_id,
         food_catalog=food_catalog,
         medication_catalog=medication_catalog,
+        employees=status_data.get("employees", []),
     )
 
 
@@ -475,17 +492,30 @@ def handle_feed_animal_form(animal_id: int):
             ebenfalls mit Status 400 und einer Fehlermeldung abgelehnt, ohne
             dass `ZooController.feed_animal()` aufgerufen wird (gleiche
             Behandlung wie ein fehlendes Feld).
+        TC-V56 (ergaenzt 2026-08-09, siehe planning_backend_darnell.md
+            Abschnitt 2.11): Given ein POST-Request mit gueltigem
+            `food_id`, aber ohne `zookeeper_id`, when das Formular
+            abgeschickt wird, then wird der Request ebenfalls mit Status
+            400 abgelehnt, ohne dass `ZooController.feed_animal()`
+            aufgerufen wird.
     """
     food_id_raw = request.form.get("food_id", "").strip()
+    zookeeper_id_raw = request.form.get("zookeeper_id", "").strip()
 
-    if not food_id_raw or not food_id_raw.isdigit() or int(food_id_raw) <= 0:
+    if (
+        not food_id_raw
+        or not food_id_raw.isdigit()
+        or int(food_id_raw) <= 0
+        or not zookeeper_id_raw.isdigit()
+        or int(zookeeper_id_raw) <= 0
+    ):
         show_message(
-            "Bitte eine gueltige Futter-ID (positive Ganzzahl) angeben.",
+            "Bitte eine gueltige Futter-ID und einen Tierpfleger angeben.",
             category="error",
         )
         return list_animals(), 400
 
-    result = _controller.feed_animal(animal_id, int(food_id_raw))
+    result = _controller.feed_animal(animal_id, int(food_id_raw), int(zookeeper_id_raw))
     show_message(result["message"], category="success" if result["success"] else "error")
     return redirect(url_for("zoo.list_animals"))
 
@@ -513,17 +543,69 @@ def handle_treat_animal_form(animal_id: int):
         Eingabe ein Redirect (Status 302) zurueck auf `/animals` nach dem
         Post/Redirect/Get-Muster, mit der Erfolgs-/Fehlermeldung von
         `ZooController.treat_animal()` als Flash-Message.
+
+    Test:
+        TC-V57: Given ein POST-Request mit gueltigem `medication_id` und
+            `veterinarian_id`, when das Formular abgeschickt wird, then
+            wird `ZooController.treat_animal()` mit den geparsten
+            Werten aufgerufen und eine Erfolgsmeldung wird nach dem
+            Redirect angezeigt.
+        TC-V58: Given ein POST-Request ohne `veterinarian_id`, when das
+            Formular abgeschickt wird, then wird der Request mit Status
+            400 abgelehnt, ohne dass `ZooController.treat_animal()`
+            aufgerufen wird.
     """
     medication_id_raw = request.form.get("medication_id", "").strip()
+    veterinarian_id_raw = request.form.get("veterinarian_id", "").strip()
 
-    if not medication_id_raw or not medication_id_raw.isdigit() or int(medication_id_raw) <= 0:
+    if (
+        not medication_id_raw
+        or not medication_id_raw.isdigit()
+        or int(medication_id_raw) <= 0
+        or not veterinarian_id_raw.isdigit()
+        or int(veterinarian_id_raw) <= 0
+    ):
         show_message(
-            "Bitte eine gueltige Medikament-ID (positive Ganzzahl) angeben.",
+            "Bitte eine gueltige Medikament-ID und einen Tierarzt angeben.",
             category="error",
         )
         return list_animals(), 400
 
-    result = _controller.treat_animal(animal_id, int(medication_id_raw))
+    result = _controller.treat_animal(animal_id, int(medication_id_raw), int(veterinarian_id_raw))
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.list_animals"))
+
+
+@zoo_bp.route("/animals/<int:animal_id>/remove", methods=["POST"])
+def handle_remove_animal_form(animal_id: int):
+    """Route `POST /animals/<id>/remove`: entfernt ein Tier dauerhaft.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09: verdrahtet `ZooController.remove_animal()`,
+    das vorher auf keiner Route lag (siehe
+    `planning_backend_darnell.md` Abschnitt 2.11). Reine Aktions-Route
+    ohne Formularfelder, analog zu `handle_clean_enclosure_form()`.
+
+    Args:
+        animal_id (int): ID des zu entfernenden Tieres, aus der URL.
+
+    Returns:
+        Response: Redirect (Status 302) zurueck auf `/animals`, mit der
+        Erfolgs-/Fehlermeldung von `ZooController.remove_animal()` als
+        Flash-Message.
+
+    Test:
+        TC-V38: Given ein existierendes Tier, when
+            `POST /animals/<id>/remove` abgeschickt wird, then wird
+            `ZooController.remove_animal()` mit dieser ID aufgerufen und
+            das Tier erscheint nach dem Redirect nicht mehr in der
+            Tierliste.
+        TC-V39: Given eine nicht existierende `animal_id`, when die
+            Route aufgerufen wird, then zeigt
+            `ZooController.remove_animal()` eine Fehlermeldung, und die
+            Route leitet trotzdem zurueck auf `/animals`.
+    """
+    result = _controller.remove_animal(animal_id)
     show_message(result["message"], category="success" if result["success"] else "error")
     return redirect(url_for("zoo.list_animals"))
 
@@ -739,6 +821,41 @@ def handle_hire_employee_form():
     return redirect(url_for("zoo.index"))
 
 
+@zoo_bp.route("/employees/<int:employee_id>/remove", methods=["POST"])
+def handle_remove_employee_form(employee_id: int):
+    """Route `POST /employees/<id>/remove`: entlaesst einen Mitarbeiter dauerhaft.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09: verdrahtet `ZooController.remove_employee()`,
+    das vorher auf keiner Route lag (siehe
+    `planning_backend_darnell.md` Abschnitt 2.11). Reine Aktions-Route
+    ohne Formularfelder, analog zu `handle_clean_enclosure_form()`.
+
+    Args:
+        employee_id (int): ID des zu entlassenden Mitarbeiters, aus der
+            URL.
+
+    Returns:
+        Response: Redirect (Status 302) zurueck auf `/`, mit der
+        Erfolgs-/Fehlermeldung von `ZooController.remove_employee()` als
+        Flash-Message.
+
+    Test:
+        TC-V40: Given ein existierender Mitarbeiter, when
+            `POST /employees/<id>/remove` abgeschickt wird, then wird
+            `ZooController.remove_employee()` mit dieser ID aufgerufen
+            und der Mitarbeiter erscheint nach dem Redirect nicht mehr
+            im Mitarbeiter-Panel.
+        TC-V41: Given der entfernte Mitarbeiter war der letzte
+            Tierpfleger, when man danach das Dashboard laedt, then zeigt
+            das "Reinigen"-Formular einen deaktivierten Knopf statt
+            einer Tierpfleger-Auswahl.
+    """
+    result = _controller.remove_employee(employee_id)
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.index"))
+
+
 @zoo_bp.route("/enclosures/<int:enclosure_id>/clean", methods=["POST"])
 def handle_clean_enclosure_form(enclosure_id: int):
     """Route `POST /enclosures/<id>/clean`: reinigt ein Gehege.
@@ -772,8 +889,19 @@ def handle_clean_enclosure_form(enclosure_id: int):
             `ZooController.clean_enclosure()` eine Fehlermeldung, und die
             Route leitet trotzdem (mit dieser Fehlermeldung) zurueck zum
             Dashboard.
+        TC-V59 (ergaenzt 2026-08-09, siehe planning_backend_darnell.md
+            Abschnitt 2.11): Given ein POST-Request ohne `zookeeper_id`
+            (z.B. weil kein Tierpfleger eingestellt ist), when die
+            Route aufgerufen wird, then wird der Request mit Status 400
+            abgelehnt, ohne dass `ZooController.clean_enclosure()`
+            aufgerufen wird.
     """
-    result = _controller.clean_enclosure(enclosure_id)
+    zookeeper_id_raw = request.form.get("zookeeper_id", "").strip()
+    if not zookeeper_id_raw.isdigit() or int(zookeeper_id_raw) <= 0:
+        show_message("Bitte einen Tierpfleger fuer die Reinigung angeben.", category="error")
+        return index(), 400
+
+    result = _controller.clean_enclosure(enclosure_id, int(zookeeper_id_raw))
     show_message(result["message"], category="success" if result["success"] else "error")
     return redirect(url_for("zoo.index"))
 
@@ -918,6 +1046,292 @@ def show_financial_report(report_data: dict | None = None) -> str:
     return render_template(
         "financial_report.html", transactions=transactions, balance=report_data["balance"]
     )
+
+
+@zoo_bp.route("/inventory", methods=["GET"])
+def show_inventory() -> str:
+    """Route `GET /inventory`: zeigt das Inventar-Tab (Futter/Medikamente).
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09: verdrahtet erstmals die vollstaendige
+    Inventarverwaltung (siehe `planning_backend_darnell.md` Abschnitt
+    2.11) - `ZooController.show_status()`'s `data["inventory_items"]`
+    zeigt Bestand/Mindestbestand je Futter-/Medikamentenposten, mit
+    Formularen zum Anlegen, Aufstocken, manuellen Verbrauchen und
+    dauerhaften Entfernen.
+
+    Args:
+        (keine)
+
+    Returns:
+        str: Gerenderter Inhalt von `templates/inventory.html`.
+
+    Test:
+        TC-V42: Given das Inventar enthaelt 3 Futtersorten und 1
+            Medikament, when `GET /inventory` aufgerufen wird, then
+            zeigt die Tabelle 4 Zeilen.
+        TC-V43: Given ein Posten hat `quantity <= minimum_quantity`,
+            when `GET /inventory` aufgerufen wird, then wird diese Zeile
+            optisch als Niedrigbestand hervorgehoben.
+    """
+    result = _controller.show_status()
+    if not result["success"]:
+        show_message(result["message"], category="error")
+        return render_template("inventory.html", inventory_items=[], zoo={}, balance=0.0, simulation_time=0)
+    data = result["data"]
+    return render_template(
+        "inventory.html",
+        inventory_items=data.get("inventory_items", []),
+        zoo=data.get("zoo", {}),
+        balance=data.get("balance", 0.0),
+        simulation_time=data.get("simulation_time", 0),
+    )
+
+
+@zoo_bp.route("/inventory/food/add", methods=["POST"])
+def handle_add_food_item_form():
+    """Route `POST /inventory/food/add`: legt eine neue Futtersorte an.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09. Nur oberflaechliche Validierung
+    (Pflichtfelder, Typen), analog zu `handle_add_animal_form()`.
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger Eingabe das
+        Inventar-Tab mit Status 400. Bei Erfolg ein Redirect (302)
+        zurueck auf `/inventory`.
+
+    Test:
+        TC-V44: Given ein POST-Request mit gueltigem `name`/`food_type`,
+            when das Formular abgeschickt wird, then wird
+            `ZooController.add_food_item()` aufgerufen und die neue
+            Futtersorte erscheint nach dem Redirect im Inventar-Tab.
+        TC-V45: Given ein POST-Request ohne `name`, when das Formular
+            abgeschickt wird, then wird der Request mit Status 400
+            abgelehnt, ohne dass `ZooController.add_food_item()`
+            aufgerufen wird.
+    """
+    name = request.form.get("name", "").strip()
+    food_type = request.form.get("food_type", "").strip()
+    quantity_raw = request.form.get("quantity", "0").strip()
+    price_raw = request.form.get("price_per_unit", "0").strip()
+    minimum_raw = request.form.get("minimum_quantity", "0").strip()
+
+    if not name or not food_type:
+        show_message("Bitte einen Namen und eine Futterart angeben.", category="error")
+        return show_inventory(), 400
+
+    try:
+        quantity = float(quantity_raw or 0)
+        price_per_unit = float(price_raw or 0)
+        minimum_quantity = float(minimum_raw or 0)
+    except ValueError:
+        show_message("Menge, Preis und Mindestbestand muessen Zahlen sein.", category="error")
+        return show_inventory(), 400
+
+    result = _controller.add_food_item(
+        {
+            "name": name,
+            "food_type": food_type,
+            "quantity": quantity,
+            "price_per_unit": price_per_unit,
+            "minimum_quantity": minimum_quantity,
+        }
+    )
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.show_inventory"))
+
+
+@zoo_bp.route("/inventory/medication/add", methods=["POST"])
+def handle_add_medication_form():
+    """Route `POST /inventory/medication/add`: legt eine neue Medikamentenart an.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09.
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger Eingabe das
+        Inventar-Tab mit Status 400. Bei Erfolg ein Redirect (302)
+        zurueck auf `/inventory`.
+
+    Test:
+        TC-V46: Given ein POST-Request mit gueltigem `name`, when das
+            Formular abgeschickt wird, then wird
+            `ZooController.add_medication()` aufgerufen und die neue
+            Medikamentenart erscheint nach dem Redirect im Inventar-Tab.
+        TC-V47: Given ein POST-Request ohne `name`, when das Formular
+            abgeschickt wird, then wird der Request mit Status 400
+            abgelehnt, ohne dass `ZooController.add_medication()`
+            aufgerufen wird.
+    """
+    name = request.form.get("name", "").strip()
+    quantity_raw = request.form.get("quantity", "0").strip()
+    minimum_raw = request.form.get("minimum_quantity", "0").strip()
+
+    if not name:
+        show_message("Bitte einen Namen angeben.", category="error")
+        return show_inventory(), 400
+
+    try:
+        quantity = float(quantity_raw or 0)
+        minimum_quantity = float(minimum_raw or 0)
+    except ValueError:
+        show_message("Menge und Mindestbestand muessen Zahlen sein.", category="error")
+        return show_inventory(), 400
+
+    result = _controller.add_medication(
+        {"name": name, "quantity": quantity, "minimum_quantity": minimum_quantity}
+    )
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.show_inventory"))
+
+
+def _parse_inventory_item_form() -> tuple[bool, float] | None:
+    """Liest `item_type`/`amount` aus dem POST-Formular fuer Inventar-Aktionen.
+
+    Gemeinsame Hilfsfunktion fuer `handle_restock_item_form()`/
+    `handle_consume_item_form()`, da beide dieselben zwei Felder lesen
+    und pruefen.
+
+    Returns:
+        tuple[bool, float] | None: `(is_food, amount)` bei gueltiger
+        Eingabe, sonst `None`.
+
+    Test:
+        TC-V48: Given Formulardaten `item_type="food"`,
+            `amount="4.5"`, when `_parse_inventory_item_form()`
+            aufgerufen wird, then liefert es `(True, 4.5)`.
+        TC-V49: Given `item_type="unbekannt"` oder ein nicht-numerisches
+            `amount`, when `_parse_inventory_item_form()` aufgerufen
+            wird, then liefert es `None`.
+    """
+    item_type = request.form.get("item_type", "").strip()
+    amount_raw = request.form.get("amount", "").strip()
+    if item_type not in ("food", "medication"):
+        return None
+    try:
+        amount = float(amount_raw)
+    except ValueError:
+        return None
+    if amount <= 0:
+        return None
+    return item_type == "food", amount
+
+
+@zoo_bp.route("/inventory/<int:item_id>/restock", methods=["POST"])
+def handle_restock_item_form(item_id: int):
+    """Route `POST /inventory/<id>/restock`: stockt einen Posten auf.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09. `item_type` ("food"/"medication") wird
+    mitgeschickt, da Futter- und Medikamenten-IDs aus zwei getrennten
+    Tabellen stammen und daher fuer sich genommen nicht eindeutig sind
+    (siehe `ZooService._find_inventory_item()`).
+
+    Args:
+        item_id (int): ID des aufzustockenden Postens, aus der URL.
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger Eingabe das
+        Inventar-Tab mit Status 400. Bei Erfolg ein Redirect (302)
+        zurueck auf `/inventory`.
+
+    Test:
+        TC-V50: Given ein POST-Request mit `item_type="food"` und
+            `amount="5.0"`, when das Formular abgeschickt wird, then
+            wird `ZooController.restock_inventory_item()` aufgerufen
+            und die Menge erhoeht sich nach dem Redirect.
+        TC-V51: Given ein POST-Request ohne gueltiges `amount`, when das
+            Formular abgeschickt wird, then wird der Request mit Status
+            400 abgelehnt, ohne dass `ZooController.
+            restock_inventory_item()` aufgerufen wird.
+    """
+    parsed = _parse_inventory_item_form()
+    if parsed is None:
+        show_message("Bitte eine gueltige Menge und Postenart angeben.", category="error")
+        return show_inventory(), 400
+    is_food, amount = parsed
+
+    result = _controller.restock_inventory_item(item_id, is_food, amount)
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.show_inventory"))
+
+
+@zoo_bp.route("/inventory/<int:item_id>/consume", methods=["POST"])
+def handle_consume_item_form(item_id: int):
+    """Route `POST /inventory/<id>/consume`: verbraucht manuell Bestand.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09 - verdrahtet `Inventory.consume_item()`,
+    das zuvor nirgendwo aufgerufen wurde (siehe
+    `planning_backend_darnell.md` Abschnitt 2.11).
+
+    Args:
+        item_id (int): ID des Postens, aus der URL.
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger Eingabe das
+        Inventar-Tab mit Status 400. Bei Erfolg ein Redirect (302)
+        zurueck auf `/inventory`.
+
+    Test:
+        TC-V52: Given ein POST-Request mit `item_type="medication"` und
+            ausreichend Bestand, when das Formular abgeschickt wird,
+            then wird `ZooController.consume_inventory_item()`
+            aufgerufen und die Menge sinkt nach dem Redirect.
+        TC-V53: Given `amount` uebersteigt den vorhandenen Bestand, when
+            das Formular abgeschickt wird, then zeigt
+            `ZooController.consume_inventory_item()` eine
+            Fehlermeldung, und die Menge bleibt unveraendert.
+    """
+    parsed = _parse_inventory_item_form()
+    if parsed is None:
+        show_message("Bitte eine gueltige Menge und Postenart angeben.", category="error")
+        return show_inventory(), 400
+    is_food, amount = parsed
+
+    result = _controller.consume_inventory_item(item_id, is_food, amount)
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.show_inventory"))
+
+
+@zoo_bp.route("/inventory/<int:item_id>/remove", methods=["POST"])
+def handle_remove_item_form(item_id: int):
+    """Route `POST /inventory/<id>/remove`: entfernt einen Posten dauerhaft.
+
+    Ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+    Schwerpunkt), 2026-08-09 - verdrahtet `Inventory.remove_item()`,
+    das zuvor nirgendwo aufgerufen wurde (siehe
+    `planning_backend_darnell.md` Abschnitt 2.11).
+
+    Args:
+        item_id (int): ID des zu entfernenden Postens, aus der URL.
+
+    Returns:
+        Response | tuple[str, int]: Bei ungueltiger Eingabe das
+        Inventar-Tab mit Status 400. Bei Erfolg ein Redirect (302)
+        zurueck auf `/inventory`.
+
+    Test:
+        TC-V54: Given ein POST-Request mit `item_type="food"` fuer
+            einen existierenden Posten, when das Formular abgeschickt
+            wird, then wird `ZooController.remove_inventory_item()`
+            aufgerufen und der Posten erscheint nach dem Redirect nicht
+            mehr im Inventar-Tab.
+        TC-V55: Given ein POST-Request mit ungueltigem `item_type`
+            (weder "food" noch "medication"), when das Formular
+            abgeschickt wird, then wird der Request mit Status 400
+            abgelehnt, ohne dass `ZooController.remove_inventory_item()`
+            aufgerufen wird.
+    """
+    item_type = request.form.get("item_type", "").strip()
+    if item_type not in ("food", "medication"):
+        show_message("Bitte eine gueltige Postenart angeben.", category="error")
+        return show_inventory(), 400
+
+    result = _controller.remove_inventory_item(item_id, item_type == "food")
+    show_message(result["message"], category="success" if result["success"] else "error")
+    return redirect(url_for("zoo.show_inventory"))
 
 
 @zoo_bp.route("/dev/reset", methods=["POST"])

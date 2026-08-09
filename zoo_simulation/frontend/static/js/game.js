@@ -25,6 +25,15 @@
  * die action-URL des Behandlungsformulars (verdrahtet
  * ZooController.treat_animal(), siehe planning_backend_darnell.md
  * Abschnitt 2.10).
+ *
+ * Weiter ergaenzt mit Unterstuetzung von Alessio Bellamacina (Frontend-
+ * Schwerpunkt), 2026-08-09 (siehe planning_backend_darnell.md Abschnitt
+ * 2.11): Fuetterungs-/Behandlungsformulare verlangen jetzt zusaetzlich
+ * eine Tierpfleger-/Tierarzt-Auswahl; `lastZookeeperId` merkt sich die
+ * zuletzt gewaehlte (oder die erste eingestellte) Tierpfleger-ID fuer
+ * die "Alle hungrigen fuettern"-Schnellaktionen, die nicht pro Tier
+ * danach fragen. Das Popup hat zudem einen "Entfernen"-Knopf
+ * (verdrahtet ZooController.remove_animal()).
  */
 
 const SPECIES_EMOJI = {
@@ -170,6 +179,44 @@ function loadAnimals() {
 }
 
 /**
+ * Liest die eingebettete Zookeeper-Liste (`#zookeepers-data`, siehe
+ * templates/animals_game.html) fuer die "Alle hungrigen
+ * fuettern"-Schnellaktion. Ergaenzt mit Unterstuetzung von Alessio
+ * Bellamacina (Frontend-Schwerpunkt), 2026-08-09 - siehe
+ * planning_backend_darnell.md Abschnitt 2.11.
+ *
+ * Args/Returns: Array (leer, falls das Element fehlt/kein gueltiges
+ * JSON enthaelt).
+ *
+ * Test:
+ *   TC-J14: Given das `#zookeepers-data`-Element enthaelt gueltiges
+ *     JSON mit 2 Tierpflegern, when `loadZookeepers()` aufgerufen
+ *     wird, then liefert es ein Array mit 2 Eintraegen.
+ *   TC-J15: Given das `#zookeepers-data`-Element fehlt, when
+ *     `loadZookeepers()` aufgerufen wird, then liefert es ein leeres
+ *     Array statt einer Exception.
+ */
+function loadZookeepers() {
+  const dataElement = document.getElementById("zookeepers-data");
+  if (!dataElement) {
+    return [];
+  }
+  try {
+    return JSON.parse(dataElement.textContent);
+  } catch (error) {
+    console.error("zoo-game: zookeepers-data konnte nicht gelesen werden", error);
+    return [];
+  }
+}
+
+// Von initGameBoard() gesetzt: id des zuletzt im Popup gewaehlten
+// Tierpflegers, oder des ersten eingestellten, falls noch keiner gewaehlt
+// wurde. "Alle hungrigen fuettern"/"Gehege fuettern" fragen bewusst nicht
+// pro Tier nach einem Tierpfleger (siehe feedAnimals()) - dieser Wert
+// entscheidet, wer dort eingetragen wird.
+let lastZookeeperId = null;
+
+/**
  * Erstellt das DOM-Element fuer ein einzelnes Tier-Sprite.
  *
  * Args: animal (Object) - ein Eintrag aus loadAnimals().
@@ -247,10 +294,23 @@ function openAnimalPopup(animal) {
   document.getElementById("animal-popup-energy").textContent = animal.energy;
 
   const feedForm = document.getElementById("animal-popup-feed-form");
-  feedForm.action = `/animals/${animal.id}/feed`;
+  if (feedForm) {
+    feedForm.action = `/animals/${animal.id}/feed`;
+    const zookeeperSelect = document.getElementById("animal-popup-zookeeper-select");
+    if (zookeeperSelect && lastZookeeperId !== null) {
+      zookeeperSelect.value = String(lastZookeeperId);
+    }
+  }
 
   const treatForm = document.getElementById("animal-popup-treat-form");
-  treatForm.action = `/animals/${animal.id}/treat`;
+  if (treatForm) {
+    treatForm.action = `/animals/${animal.id}/treat`;
+  }
+
+  const removeForm = document.getElementById("animal-popup-remove-form");
+  if (removeForm) {
+    removeForm.action = `/animals/${animal.id}/remove`;
+  }
 
   document.getElementById("animal-popup").classList.remove("hidden");
   if (window.ZooSound) {
@@ -489,9 +549,14 @@ function refreshAddAnimalForm() {
  *   TC-J21: Given ein leeres Array wird uebergeben, when
  *     `feedAnimals([])` aufgerufen wird, then wird kein Request gesendet
  *     und die Seite nicht neu geladen.
+ *   TC-J22 (ergaenzt 2026-08-09, siehe planning_backend_darnell.md
+ *     Abschnitt 2.11): Given `lastZookeeperId` ist `null` (kein
+ *     Tierpfleger eingestellt), when `feedAnimals(animals)` mit
+ *     nicht-leerem Array aufgerufen wird, then wird kein Request
+ *     gesendet.
  */
 async function feedAnimals(animalsToFeed) {
-  if (!animalsToFeed.length) {
+  if (!animalsToFeed.length || lastZookeeperId === null) {
     return;
   }
   await Promise.all(
@@ -499,7 +564,7 @@ async function feedAnimals(animalsToFeed) {
       fetch(`/animals/${animal.id}/feed`, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: "food_id=1",
+        body: `food_id=1&zookeeper_id=${lastZookeeperId}`,
       })
     )
   );
@@ -665,6 +730,15 @@ function initGameBoard() {
       if (window.ZooSound) {
         window.ZooSound.play("click");
       }
+    });
+  }
+
+  const zookeepers = loadZookeepers();
+  lastZookeeperId = zookeepers.length ? zookeepers[0].id : null;
+  const zookeeperSelect = document.getElementById("animal-popup-zookeeper-select");
+  if (zookeeperSelect) {
+    zookeeperSelect.addEventListener("change", () => {
+      lastZookeeperId = Number(zookeeperSelect.value);
     });
   }
 
