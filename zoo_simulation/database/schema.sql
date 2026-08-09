@@ -18,11 +18,33 @@
 -- reads/writes it), so a table for it would never be used. It can be added
 -- later if the simulation needs to persist events across runs.
 --
+-- BEHAVIOR is likewise intentionally NOT modeled: Behavior objects
+-- (FeedingBehavior/SocialBehavior/RestBehavior) carry no state worth
+-- round-tripping for this project's scope, so SQLAnimalRepository assigns
+-- every reconstructed Animal a fixed default Behavior set instead (see its
+-- module docstring, "Fixed 2026-08-09", and planning_db_kaiss.md section 6).
+--
+-- FINANCE_MANAGER is likewise NOT modeled: it is a pure in-memory wrapper
+-- around the balance FinanceRepository.get_balance() already computes from
+-- this schema's own `transaction` table, so persisting it separately would
+-- just duplicate that number (see planning_db_kaiss.md section 6).
+--
 -- ANIMAL and EMPLOYEE use single-table inheritance: `species` /
 -- `employee_type` act as the discriminator for the concrete subclass
 -- (Lion/Giraffe/Penguin, Zookeeper/Veterinarian/Administrator), since the
 -- subclasses add no persisted attributes beyond what the base class already
 -- has (Lion/Giraffe/Penguin only add `food_preference`).
+--
+-- CHECK constraints (added 2026-08-09): every numeric column that the
+-- domain model already constrains in Python (Animal._validate_value()
+-- clamps health/hunger/energy to 0-100, Enclosure keeps cleanliness in
+-- 0-100, Employee/FoodItem/Medication logically can't go negative) now has
+-- a matching CHECK here too, so a direct/malformed INSERT (bypassing the
+-- Python layer) cannot corrupt data either - defense in depth for NFR-09
+-- ("Invalid operations shall not corrupt application data"), not just a
+-- single point of enforcement in the domain layer.
+
+
 
 PRAGMA foreign_keys = ON;
 
@@ -41,7 +63,10 @@ CREATE TABLE IF NOT EXISTS enclosure (
     enclosure_type  TEXT,
     size            REAL,
     capacity        INTEGER NOT NULL CHECK (capacity >= 0),
-    cleanliness     REAL,
+    -- Nullable columns' CHECK is only evaluated when a value is present:
+    -- SQLite treats a CHECK expression that evaluates to NULL as satisfied,
+    -- so this does not force cleanliness to be set.
+    cleanliness     REAL CHECK (cleanliness BETWEEN 0 AND 100),
     temperature     REAL
 );
 
@@ -53,10 +78,10 @@ CREATE TABLE IF NOT EXISTS animal (
     name             TEXT NOT NULL,
     species          TEXT NOT NULL,
     food_preference  TEXT,
-    age              INTEGER,
-    health           INTEGER,
-    hunger           INTEGER,
-    energy           INTEGER
+    age              INTEGER CHECK (age >= 0),
+    health           INTEGER CHECK (health BETWEEN 0 AND 100),
+    hunger           INTEGER CHECK (hunger BETWEEN 0 AND 100),
+    energy           INTEGER CHECK (energy BETWEEN 0 AND 100)
 );
 
 CREATE INDEX IF NOT EXISTS idx_animal_enclosure_id ON animal (enclosure_id);
@@ -66,7 +91,7 @@ CREATE TABLE IF NOT EXISTS employee (
     zoo_id         INTEGER NOT NULL REFERENCES zoo (zoo_id) ON DELETE CASCADE,
     employee_type  TEXT NOT NULL,
     name           TEXT NOT NULL,
-    salary         REAL
+    salary         REAL CHECK (salary >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_employee_zoo_id ON employee (zoo_id);
@@ -82,8 +107,8 @@ CREATE TABLE IF NOT EXISTS food_item (
     name              TEXT NOT NULL,
     food_type         TEXT,
     quantity          REAL NOT NULL DEFAULT 0 CHECK (quantity >= 0),
-    price_per_unit    REAL,
-    minimum_quantity  REAL
+    price_per_unit    REAL CHECK (price_per_unit >= 0),
+    minimum_quantity  REAL CHECK (minimum_quantity >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_food_item_inventory_id ON food_item (inventory_id);
@@ -93,7 +118,7 @@ CREATE TABLE IF NOT EXISTS medication (
     inventory_id      INTEGER NOT NULL REFERENCES inventory (inventory_id) ON DELETE CASCADE,
     name              TEXT NOT NULL,
     quantity          REAL NOT NULL DEFAULT 0 CHECK (quantity >= 0),
-    minimum_quantity  REAL
+    minimum_quantity  REAL CHECK (minimum_quantity >= 0)
 );
 
 CREATE INDEX IF NOT EXISTS idx_medication_inventory_id ON medication (inventory_id);

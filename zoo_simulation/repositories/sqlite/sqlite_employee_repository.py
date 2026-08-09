@@ -16,6 +16,21 @@
     version: 1.0.0
     license: Educational Use - Programming II Module
 
+    Fixed 2026-08-09: `_row_to_employee()` previously called every
+    Employee subclass constructor with only id/name/salary - fine for
+    Zookeeper/Veterinarian (no extra required arguments), but
+    `Administrator` also requires `finance_manager` (a
+    `FinanceManager`, constructor-injected per
+    planning_backend_darnell.md section 2.3), so every `Administrator`
+    row raised `TypeError` on load. `SQLEmployeeRepository` now takes a
+    `FinanceRepository` dependency (same pattern as
+    `SQLZooRepository`, see that module's docstring) and builds a fresh
+    `FinanceManager(balance=...)` for reconstructed Administrators only.
+    This is a fresh FinanceManager reflecting the current balance, not
+    literally the same Python object as any other loaded Zoo's
+    FinanceManager - FinanceManager has no persisted identity of its own
+    (no table, no id) for this repository to match it up by; see
+    planning_db_kaiss.md section 6.
 """
 
 from __future__ import annotations
@@ -24,11 +39,13 @@ import importlib
 import sqlite3
 from typing import TYPE_CHECKING
 
+from zoo_simulation.domain.finance_manager import FinanceManager
 from zoo_simulation.repositories.interfaces.employee_repository import EmployeeRepository
 
 if TYPE_CHECKING:
     from zoo_simulation.database.database_connection import DatabaseConnection
     from zoo_simulation.domain.employees.employee import Employee
+    from zoo_simulation.repositories.interfaces.finance_repository import FinanceRepository
 
 _EMPLOYEE_TYPE_TO_CLASS = {
     "Zookeeper": ("zoo_simulation.domain.employees.zookeeper", "Zookeeper"),
@@ -36,31 +53,44 @@ _EMPLOYEE_TYPE_TO_CLASS = {
     "Administrator": ("zoo_simulation.domain.employees.administrator", "Administrator"),
 }
 
+# employee_type values whose constructor needs a FinanceManager in addition
+# to id/name/salary - see module docstring, "Fixed 2026-08-09".
+_TYPES_REQUIRING_FINANCE_MANAGER = frozenset({"Administrator"})
+
 
 class SQLEmployeeRepository(EmployeeRepository):
     """SQLEmployeeRepository - persists Employee objects in the `employee` table.
 
-        - Constructor: stores the DatabaseConnection used for all queries;
-          does not open/close the connection itself (owned by the caller,
-          e.g. main.py).
+        - Constructor: stores the DatabaseConnection used for all queries,
+          plus the FinanceRepository needed to reconstruct Administrator
+          rows (see module docstring); does not open/close the connection
+          itself (owned by the caller, e.g. main.py).
         - _connection (DatabaseConnection): the connection used to run SQL
           statements against the `employee` table.
+        - _finance_repository (FinanceRepository): used by
+          `_row_to_employee()` to build the FinanceManager an
+          Administrator requires.
         - Module-level _EMPLOYEE_TYPE_TO_CLASS: maps the `employee_type`
           discriminator column to the (module, class name) used to
           reconstruct the correct concrete Employee subclass when reading
           a row.
     """
 
-    def __init__(self, connection: DatabaseConnection) -> None:
-        """Store the DatabaseConnection used for all Employee persistence.
+    def __init__(
+        self, connection: DatabaseConnection, finance_repository: FinanceRepository
+    ) -> None:
+        """Store the DatabaseConnection and FinanceRepository used for Employee persistence.
 
         Args:
             connection (DatabaseConnection): an already-connected
                 DatabaseConnection (e.g. SQLiteConnection).
+            finance_repository (FinanceRepository): used by
+                `_row_to_employee()` to build a FinanceManager when
+                reconstructing an Administrator (see module docstring).
 
         Test:
-            - Given a connected DatabaseConnection, when
-              SQLEmployeeRepository is constructed, then
+            - Given a connected DatabaseConnection and a FinanceRepository,
+              when SQLEmployeeRepository is constructed, then
               save()/get_by_id()/get_all()/update()/delete() can be called
               immediately without any further setup.
             - Given the same connection instance is shared with other
@@ -69,6 +99,7 @@ class SQLEmployeeRepository(EmployeeRepository):
               transaction.
         """
         self._connection = connection
+        self._finance_repository = finance_repository
 
     def save(self, employee: Employee, zoo_id: int) -> int:
         """Insert a new Employee row.
@@ -210,12 +241,19 @@ class SQLEmployeeRepository(EmployeeRepository):
         Returns:
             Employee: a Zookeeper/Veterinarian/Administrator instance
             populated from the row, chosen via the `employee_type`
-            discriminator column.
+            discriminator column. Administrator rows additionally get a
+            freshly-built `FinanceManager` (see module docstring, "Fixed
+            2026-08-09").
 
         Test:
             - Given a row with employee_type="Zookeeper", when
               _row_to_employee() is called, then a Zookeeper instance is
               returned with attributes equal to the row's values.
+            - Given a row with employee_type="Administrator", when
+              _row_to_employee() is called, then an Administrator instance
+              is returned whose `record_income()`/`record_expense()` can
+              be called immediately (its FinanceManager is present and
+              usable), instead of raising TypeError.
             - Given a row with an employee_type value not present in
               _EMPLOYEE_TYPE_TO_CLASS (e.g. corrupted data), when
               _row_to_employee() is called, then a ValueError is raised
@@ -228,8 +266,15 @@ class SQLEmployeeRepository(EmployeeRepository):
         module_path, class_name = _EMPLOYEE_TYPE_TO_CLASS[employee_type]
         employee_class = getattr(importlib.import_module(module_path), class_name)
 
+        extra_kwargs = {}
+        if employee_type in _TYPES_REQUIRING_FINANCE_MANAGER:
+            extra_kwargs["finance_manager"] = FinanceManager(
+                balance=self._finance_repository.get_balance()
+            )
+
         return employee_class(
             id=row["employee_id"],
             name=row["name"],
             salary=row["salary"],
+            **extra_kwargs,
         )
