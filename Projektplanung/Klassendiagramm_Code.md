@@ -30,6 +30,7 @@ classDiagram
         +show_status() dict
         +add_animal(data: dict) dict
         +feed_animal(animal_id: int, food_id: int) dict
+        +treat_animal(animal_id: int, medication_id: int) dict
         +hire_employee(data: dict) dict
         +clean_enclosure(enclosure_id: int) dict
         +sell_ticket(price: float) dict
@@ -52,6 +53,7 @@ classDiagram
         +get_zoo() Zoo
         +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
+        +treat_animal(animal_id: int, medication_id: int) void
         +hire_employee(employee: Employee) void
         +clean_enclosure(enclosure_id: int) void
         +sell_ticket(price: float) void

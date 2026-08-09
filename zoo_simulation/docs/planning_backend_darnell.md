@@ -48,6 +48,7 @@ classDiagram
         +show_status() dict
         +add_animal(data: dict) dict
         +feed_animal(animal_id: int, food_id: int) dict
+        +treat_animal(animal_id: int, medication_id: int) dict
         +hire_employee(data: dict) dict
         +clean_enclosure(enclosure_id: int) dict
         +sell_ticket(price: float) dict
@@ -66,6 +67,7 @@ classDiagram
         +get_zoo() Zoo
         +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
+        +treat_animal(animal_id: int, medication_id: int) void
         +hire_employee(employee: Employee) void
         +clean_enclosure(enclosure_id: int) void
         +sell_ticket(price: float) void
@@ -568,6 +570,32 @@ specific employee to a specific task (e.g. "this Zookeeper cleans this
 Enclosure") - `clean_enclosure()` is a generic action not attributed to
 an individual employee, matching the scope of what was actually asked
 for.
+
+### 2.10 Feeding Cost and ZooController.treat_animal() (agreed 2026-08-09)
+
+Found by using the running app:
+
+- `feed_animal()` never actually cost anything - `Animal.eat()` has no
+  `FinanceManager` access (matching its diagram, it is a pure domain
+  method), and nothing above it ever booked the cost either.
+  `ZooService.feed_animal()` now compares the fed `FoodItem`'s quantity
+  before/after `Animal.eat()`, and if any was actually consumed, records
+  `amount_consumed * price_per_unit` as an expense via the zoo's
+  `FinanceManager`, persisted the same way `sell_ticket()` already
+  persists its income Transaction.
+- The frontend's "Behandeln" button (game view popup) was a disabled
+  placeholder ("Tierarzt-Funktion existiert im Backend noch nicht") -
+  `Veterinarian.treat_animal()` existed in the domain model, but no
+  `ZooService`/`ZooController` method ever called it. Added
+  `ZooService.treat_animal(animal_id, medication_id)` (delegates to the
+  zoo's first employed `Veterinarian`, mirroring how `feed_animal()`
+  does not require picking a specific `Zookeeper` either) and
+  `ZooController.treat_animal(animal_id, medication_id) dict`. Neither
+  existed on the original diagram. `ZooController.show_status()`'s
+  `data` also gains a `medication_catalog` (list of `{"id", "name"}`,
+  parallel to the existing `food_catalog`) so the frontend can offer a
+  medication choice; the bootstrap seed now also stocks two starter
+  Medications, since there was previously none to treat with at all.
 
 ## 3. OOP Principles Applied in the Backend
 
