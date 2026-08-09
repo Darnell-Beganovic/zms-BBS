@@ -111,12 +111,21 @@ class ZooService:
             raise ValueError(f"Zoo {self._zoo_id} not found.")
         return zoo
 
-    def add_animal(self, animal: Animal, enclosure_id: int) -> None:
+    def add_animal(self, animal: Animal, enclosure_id: int) -> int:
         """Add a new animal to an existing enclosure, if it has room.
 
         Args:
             animal (Animal): the animal to add (not yet persisted).
             enclosure_id (int): id of the enclosure to house it in.
+
+        Returns:
+            int: the new animal's id (`AnimalRepository.save()`'s return
+                value). Added 2026-08-09 while wiring `ZooController`:
+                the frontend's "adopt animal" flow needs the new id
+                back to highlight the animal after redirecting (see
+                `zoo_view.py`'s `handle_add_animal_form()`) - a diagram
+                deviation from `void`, same pattern as the repository
+                layer's `save()` methods.
 
         Raises:
             ValueError: if `enclosure_id` does not exist, or the
@@ -125,8 +134,8 @@ class ZooService:
         Test:
             - Given an existing enclosure with free capacity, when
               `add_animal(animal, enclosure_id)` is called, then the
-              animal is persisted via AnimalRepository.save() with that
-              enclosure_id.
+              returned id is a positive int and the animal is persisted
+              via AnimalRepository.save() with that enclosure_id.
             - Given an enclosure_id that does not exist, when
               `add_animal()` is called, then a ValueError is raised and
               nothing is persisted.
@@ -136,7 +145,7 @@ class ZooService:
             raise ValueError(f"Enclosure {enclosure_id} not found.")
         if not enclosure.has_capacity():
             raise ValueError(f"Enclosure {enclosure_id} is at full capacity.")
-        self._animal_repository.save(animal, enclosure_id)
+        return self._animal_repository.save(animal, enclosure_id)
 
     def feed_animal(self, animal_id: int, food_id: int) -> None:
         """Feed a stored animal with a stored food item.

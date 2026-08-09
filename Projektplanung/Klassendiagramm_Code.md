@@ -48,7 +48,7 @@ classDiagram
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
-        +add_animal(animal: Animal, enclosure_id: int) void
+        +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
         +hire_employee(employee: Employee) void
         +sell_ticket(price: float) void

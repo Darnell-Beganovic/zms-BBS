@@ -62,7 +62,7 @@ classDiagram
         -InventoryRepository inventory_repository
         -FinanceRepository finance_repository
         +get_zoo() Zoo
-        +add_animal(animal: Animal, enclosure_id: int) void
+        +add_animal(animal: Animal, enclosure_id: int) int
         +feed_animal(animal_id: int, food_id: int) void
         +hire_employee(employee: Employee) void
         +sell_ticket(price: float) void
@@ -425,6 +425,29 @@ Two implementation-driven additions from Sprint 6 (`ZooService`,
   but unused attribute. Kept deliberately simple: one scaled penalty, no
   per-species variation, no other interaction with Behavior/Animal
   internals.
+
+### 2.5 ZooService.add_animal() Returns int, InventoryRepository.create_inventory() (agreed 2026-08-09)
+
+Two small additions made while wiring `ZooController` into the Flask
+frontend (integration work, see `main.py`):
+
+- `ZooService.add_animal()` changes from `void` to `int`, returning the
+  new animal's id (`AnimalRepository.save()`'s own return value, simply
+  no longer discarded). The frontend's "adopt animal" flow
+  (`zoo_view.py`'s `handle_add_animal_form()`) redirects with
+  `?highlight=<new-animal-id>` so the game view can briefly highlight
+  the newly added animal - it needs that id back from
+  `ZooController.add_animal()`, which in turn needs it from
+  `ZooService.add_animal()`. Same pattern as the repository layer's
+  `save()` methods returning `int` instead of `void`.
+- `InventoryRepository`/`SQLInventoryRepository` gain
+  `create_inventory(zoo_id: int) int` (Database focus interface,
+  Backend-authored addition - see that module's docstring for the full
+  rationale): there was no existing way to create the `inventory`
+  table's row itself, since `save_item()`/`save_medication()` both
+  require an already-existing `inventory_id`. Without it, a brand-new
+  Zoo could never get an Inventory to stock, since nothing could create
+  its first `inventory` row.
 
 ## 3. OOP Principles Applied in the Backend
 
