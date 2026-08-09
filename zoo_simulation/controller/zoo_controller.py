@@ -21,6 +21,7 @@ from zoo_simulation.domain.employees.administrator import Administrator
 from zoo_simulation.domain.employees.veterinarian import Veterinarian
 from zoo_simulation.domain.employees.zookeeper import Zookeeper
 from zoo_simulation.domain.food_item import FoodItem
+from zoo_simulation.domain.medication import Medication
 
 if TYPE_CHECKING:
     from zoo_simulation.database.database_connection import DatabaseConnection
@@ -89,6 +90,13 @@ _SEED_FOOD_ITEMS = (
     {"name": "Heu", "food_type": "hay", "quantity": 100.0, "price_per_unit": 3.0, "minimum_quantity": 10.0},
     {"name": "Fleisch", "food_type": "meat", "quantity": 100.0, "price_per_unit": 8.0, "minimum_quantity": 10.0},
     {"name": "Fisch", "food_type": "fish", "quantity": 100.0, "price_per_unit": 5.0, "minimum_quantity": 10.0},
+)
+# Added 2026-08-09 alongside treat_animal() (see planning_backend_darnell.md
+# section 2.10) - without any seeded Medication, the "Behandeln" feature
+# would have nothing to treat with.
+_SEED_MEDICATIONS = (
+    {"name": "Antibiotikum", "quantity": 20.0, "minimum_quantity": 5.0},
+    {"name": "Schmerzmittel", "quantity": 20.0, "minimum_quantity": 5.0},
 )
 
 # One employee per role, so there is someone to see/interact with from
@@ -219,6 +227,8 @@ def _seed_initial_zoo(
     inventory_id = inventory_repository.create_inventory(zoo_id)
     for item_kwargs in _SEED_FOOD_ITEMS:
         inventory_repository.save_item(FoodItem(**item_kwargs), inventory_id)
+    for medication_kwargs in _SEED_MEDICATIONS:
+        inventory_repository.save_medication(Medication(**medication_kwargs), inventory_id)
 
     for employee_kwargs in _SEED_EMPLOYEES:
         role = employee_kwargs["role"]
@@ -454,6 +464,11 @@ class ZooController:
             for item in zoo.inventory.items
             if isinstance(item, FoodItem)
         ]
+        medication_catalog = [
+            {"id": item.id, "name": item.name}
+            for item in zoo.inventory.items
+            if isinstance(item, Medication)
+        ]
         employees = [
             {"id": employee.id, "name": employee.name, "role": type(employee).__name__, "salary": employee.salary}
             for employee in zoo.employees
@@ -475,6 +490,7 @@ class ZooController:
                 "simulation_time": self._simulation_service.get_simulation_time(),
                 "balance": zoo.finance_manager.get_balance(),
                 "food_catalog": food_catalog,
+                "medication_catalog": medication_catalog,
                 "employees": employees,
             },
         }
@@ -569,6 +585,36 @@ class ZooController:
         except ValueError as exc:
             return {"success": False, "message": str(exc), "data": None}
         return {"success": True, "message": "Animal fed.", "data": None}
+
+    def treat_animal(self, animal_id: int, medication_id: int) -> dict[str, Any]:
+        """Treat a stored animal with a stored medication.
+
+        Added 2026-08-09: not part of the original `ZooController`
+        diagram - the frontend's "Behandeln" button was a disabled
+        placeholder ("Tierarzt-Funktion existiert im Backend noch
+        nicht") until now (see `planning_backend_darnell.md` section
+        2.10).
+
+        Args:
+            animal_id (int): id of the animal to treat.
+            medication_id (int): id of the Medication to use.
+
+        Returns:
+            dict: `{"success": bool, "message": str, "data": None}`.
+
+        Test:
+            - Given an existing animal, available medication and an
+              employed Veterinarian, when
+              `treat_animal(animal_id, medication_id)` is called, then
+              `success` is True.
+            - Given the zoo employs no Veterinarian, when
+              `treat_animal()` is called, then `success` is False.
+        """
+        try:
+            self._zoo_service.treat_animal(animal_id, medication_id)
+        except ValueError as exc:
+            return {"success": False, "message": str(exc), "data": None}
+        return {"success": True, "message": "Animal treated.", "data": None}
 
     def sell_ticket(self, price: float) -> dict[str, Any]:
         """Sell one visitor ticket.
