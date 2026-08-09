@@ -493,8 +493,11 @@ run, `ZooController.__init__()`'s `zoo_service`/`simulation_service`/
 `report_service` parameters became optional: when omitted, a new
 `_build_default_dependencies()` (in `zoo_controller.py`) connects to a
 real SQLite database (`database/zoo.db` by default), applies
-`schema.sql`, builds every `SQL*Repository`, and seeds a first zoo
-(one Enclosure, a stocked Inventory) if none exists yet.
+`schema.sql`, builds every `SQL*Repository`, and seeds a first zoo (one
+Enclosure per known habitat type - Savanna/Grassland/Polar, matching
+`static/js/game.js`'s `SPECIES_HABITATS` exactly so every species is
+adoptable out of the box - plus a stocked Inventory) if none exists
+yet.
 
 This makes `ZooController` a composition root when used this way, which
 is not the cleanest possible separation of concerns in the abstract -

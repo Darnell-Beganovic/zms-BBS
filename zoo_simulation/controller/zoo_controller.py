@@ -64,12 +64,21 @@ _SCHEMA_PATH = Path(__file__).resolve().parents[1] / "database" / "schema.sql"
 _DEFAULT_ZOO_NAME = "Musterzoo"
 _DEFAULT_ZOO_LOCATION = "Berlin"
 _DEFAULT_MAXIMUM_VISITORS = 50
-_DEFAULT_ENCLOSURE_KWARGS = {
-    "name": "Savannah",
-    "enclosure_type": "savannah",
-    "size": 200.0,
-    "capacity": 10,
-}
+
+# enclosure_type values must match static/js/game.js's SPECIES_HABITATS
+# exactly ("Savanna"/"Grassland" for Lion/Giraffe, "Polar"/"Aquatic" for
+# Penguin) - that mapping disables every dropdown option whose
+# enclosure_type doesn't match the selected species (client-side only,
+# see that file's own comment), so a mismatched string here silently
+# makes the "adopt animal" form unusable for every species, not just
+# Penguin. One enclosure per known habitat, mirroring
+# controller_stub.py's own seed data (same names/types), so all three
+# species are adoptable out of the box.
+_SEED_ENCLOSURES = (
+    {"name": "Savannah", "enclosure_type": "Savanna", "size": 200.0, "capacity": 4},
+    {"name": "Grassland", "enclosure_type": "Grassland", "size": 150.0, "capacity": 3},
+    {"name": "Polar Bay", "enclosure_type": "Polar", "size": 180.0, "capacity": 6},
+)
 _SEED_FOOD_ITEMS = (
     {"name": "Heu", "food_type": "hay", "quantity": 100.0, "price_per_unit": 3.0, "minimum_quantity": 10.0},
     {"name": "Fleisch", "food_type": "meat", "quantity": 100.0, "price_per_unit": 8.0, "minimum_quantity": 10.0},
@@ -140,7 +149,7 @@ def _seed_initial_zoo(
     enclosure_repository: EnclosureRepository,
     inventory_repository: InventoryRepository,
 ) -> int:
-    """Create a first zoo (with one enclosure and a stocked inventory) on an empty database.
+    """Create a first zoo (with one enclosure per known habitat and a stocked inventory) on an empty database.
 
     Uses a direct `connection.execute()` for the `zoo` row itself rather
     than `ZooRepository.save(zoo)`: constructing a `Zoo` domain object
@@ -155,7 +164,7 @@ def _seed_initial_zoo(
         connection (DatabaseConnection): used for the one-off `zoo` row
             insert.
         enclosure_repository (EnclosureRepository): used to save the
-            seeded Enclosure.
+            seeded Enclosures (see `_SEED_ENCLOSURES`).
         inventory_repository (InventoryRepository): used to create the
             Inventory row and stock it with starter FoodItems.
 
@@ -164,8 +173,9 @@ def _seed_initial_zoo(
 
     Test:
         - Given an empty database, when `_seed_initial_zoo()` is called,
-          then it returns a positive int and that zoo has exactly one
-          Enclosure and 3 FoodItems afterward.
+          then it returns a positive int and that zoo has exactly 3
+          Enclosures (one per `_SEED_ENCLOSURES` entry) and 3 FoodItems
+          afterward.
         - Given `_seed_initial_zoo()` was already called once, when
           called again, then a second, independent zoo is created (no
           duplicate-detection here - that is `_build_default_dependencies()`'s
@@ -180,8 +190,8 @@ def _seed_initial_zoo(
     connection.commit()
     zoo_id = cursor.lastrowid
 
-    enclosure = Enclosure(**_DEFAULT_ENCLOSURE_KWARGS)
-    enclosure_repository.save(enclosure, zoo_id)
+    for enclosure_kwargs in _SEED_ENCLOSURES:
+        enclosure_repository.save(Enclosure(**enclosure_kwargs), zoo_id)
 
     inventory_id = inventory_repository.create_inventory(zoo_id)
     for item_kwargs in _SEED_FOOD_ITEMS:
@@ -217,7 +227,7 @@ def _build_default_dependencies(
         - Given a database_path pointing to a non-existent file, when
           `_build_default_dependencies()` is called, then the file is
           created, a zoo is seeded, and the returned ZooService's
-          `get_zoo()` returns a Zoo with exactly one Enclosure.
+          `get_zoo()` returns a Zoo with 3 Enclosures.
         - Given `_build_default_dependencies()` was already called once
           for the same database_path (so a zoo already exists), when
           called again, then it reuses the existing zoo instead of
